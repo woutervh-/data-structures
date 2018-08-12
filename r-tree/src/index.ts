@@ -192,20 +192,19 @@ function quadraticSplit<Pointer>(tree: Tree<Pointer>, leaf: Leaf<Pointer>): [Lea
     return [left, right];
 }
 
-function adjustTree<Pointer>(tree: Tree<Pointer>, n1: Leaf<Pointer>, n2?: Leaf<Pointer>) {
-    if (n1.parent !== null) {
+function adjustTree<Pointer>(tree: Tree<Pointer>, path: LeafPath<Pointer>, n1: Leaf<Pointer>, n2?: Leaf<Pointer>) {
+    if (tree.root === n1) {
 
     }
 }
 
 function insert<Pointer>(tree: Tree<Pointer>, child: LeafChild<Pointer>) {
     const path = chooseLeaf(tree, child.bounds);
-    const leaf = path[path.length - 1];
-    if (leaf.children.length < tree.maximumEntries) {
-        leaf.children.push(child);
+    if (path.leaf.children.length < tree.maximumEntries) {
+        path.leaf.children.push(child);
     } else {
-        leaf.children.push(child);
-        const split = quadraticSplit(tree, leaf);
+        path.leaf.children.push(child);
+        const split = quadraticSplit(tree, path.leaf);
     }
 }
 
