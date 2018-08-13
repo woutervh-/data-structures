@@ -38,6 +38,7 @@ interface LeafPath<Data> {
 type Entry<Data> = LeafEntry<Data> | BranchEntry<Data>;
 
 function overlaps(a: Bounds, b: Bounds, dimensions: number): boolean {
+    // Checks if bounds overlap (inclusively borders)
     for (let i = 0; i < dimensions; i++) {
         if (a[i * 2] > b[i * 2 + 1] || a[i * 2 + 1] < b[i * 2]) {
             return false;
@@ -210,42 +211,69 @@ function quadraticSplit<Data>(tree: Tree<Data>, entries: Entry<Data>[]): [Entry<
     return [left.entries, right.entries];
 }
 
-function adjustTree<Data>(tree: Tree<Data>, path: LeafPath<Data>, n1: TreeNode<Data>, n2?: TreeNode<Data>) {
-    while (tree.root !== n1) {
-        const parent = path.branches.pop();
+function adjustTree<Data>(tree: Tree<Data>, path: LeafPath<Data>, n1: TreeNode<Data>, n2?: TreeNode<Data>): [TreeNode<Data>, TreeNode<Data>] | undefined {
+    let parent: BranchNode<Data> | undefined;
+    while ((parent = path.branches.pop()) !== undefined) {
         if (parent === undefined) {
             throw new Error('Parent path too short.');
         }
         const n1Index = parent.entries.findIndex((entry) => entry.child === n1);
         const n1Entries: Bounded[] = n1.entries;
-        parent.entries[n1Index].bounds = combine(parent.entries[n1Index].bounds, enclose(n1Entries.map((entry) => entry.bounds), tree.dimensions), tree.dimensions);
+        parent.entries[n1Index].bounds = enclose(n1Entries.map((entry) => entry.bounds), tree.dimensions);
         if (n2) {
             const n2Entries: Bounded[] = n2.entries;
-            const entry: BranchChild<Data> = {
+            const entry: BranchEntry<Data> = {
                 bounds: enclose(n2Entries.map((entry) => entry.bounds), tree.dimensions),
-                node: n2
+                child: n2
             };
-            if (parent.children.length < tree.maximumEntries) {
-                parent.children.push(entry);
+            if (parent.entries.length < tree.maximumEntries) {
+                parent.entries.push(entry);
                 n1 = parent;
                 n2 = undefined;
             } else {
-                parent.children.push(entry);
-                const [p, pp] = quadraticSplit(tree, parent);
-                n1 = p;
-                n2 = pp;
+                parent.entries.push(entry);
+                const [p, pp] = quadraticSplit(tree, parent.entries);
+                parent.entries = p;
+                n1 = parent;
+                n2 = {
+                    type: 'branch',
+                    entries: pp
+                };
             }
         }
+    }
+    if (n2) {
+        return [n1, n2];
     }
 }
 
 function insert<Data>(tree: Tree<Data>, entry: LeafEntry<Data>) {
     const path = chooseLeaf(tree, entry.bounds);
-    if (path.leaf.entries.length < tree.maximumEntries) {
-        path.leaf.entries.push(entry);
+    const n1 = path.leaf;
+    let n2: LeafNode<Data> | undefined = undefined;
+    if (n1.entries.length < tree.maximumEntries) {
+        n1.entries.push(entry);
     } else {
-        path.leaf.entries.push(entry);
-        const split = quadraticSplit(tree, path.leaf.entries);
+        n1.entries.push(entry);
+        const split = quadraticSplit(tree, n1.entries);
+        n1.entries = split[0];
+        n2 = {
+            type: 'leaf',
+            entries: split[1]
+        };
+    }
+    const rootSplit = adjustTree(tree, path, n1, n2);
+    if (rootSplit) {
+        tree.root = {
+            type: 'branch',
+            entries: rootSplit.map<BranchEntry<Data>>((node) => {
+                const entries: Bounded[] = node.entries;
+                return {
+                    bounds: enclose(entries.map((entry) => entry.bounds), tree.dimensions),
+                    child: node
+                };
+            })
+        };
     }
 }
 
@@ -261,4 +289,10 @@ const myTree: Tree<string> = {
     maximumEntries: 4
 };
 
-console.log(search(myTree, myTree.root, [0, 10, 0, 10]));
+insert(myTree, { bounds: [1, 2, 1, 2], data: 'R2' });
+insert(myTree, { bounds: [2, 3, 2, 3], data: 'R3' });
+insert(myTree, { bounds: [3, 4, 3, 4], data: 'R4' });
+insert(myTree, { bounds: [4, 5, 4, 5], data: 'R5' });
+
+console.log(JSON.stringify(myTree, null, 2));
+console.log(search(myTree, myTree.root, [0, 3, 0, 3]));
