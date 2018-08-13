@@ -35,6 +35,8 @@ interface LeafPath<Data> {
     leaf: LeafNode<Data>;
 }
 
+type Entry<Data> = LeafEntry<Data> | BranchEntry<Data>;
+
 function overlaps(a: Bounds, b: Bounds, dimensions: number): boolean {
     for (let i = 0; i < dimensions; i++) {
         if (a[i * 2] > b[i * 2 + 1] || a[i * 2 + 1] < b[i * 2]) {
@@ -112,10 +114,10 @@ function chooseLeaf<Data>(tree: Tree<Data>, bounds: Bounds): LeafPath<Data> {
 
 function pickSeeds<Data>(tree: Tree<Data>, entries: LeafEntry<Data>[]): [LeafEntry<Data>, LeafEntry<Data>];
 function pickSeeds<Data>(tree: Tree<Data>, entries: BranchEntry<Data>[]): [BranchEntry<Data>, BranchEntry<Data>];
-function pickSeeds<Data, Entry extends LeafEntry<Data> | BranchEntry<Data>>(tree: Tree<Data>, entries: Entry[]): [Entry, Entry];
-function pickSeeds<Data, Entry extends LeafEntry<Data> | BranchEntry<Data>>(tree: Tree<Data>, entries: Entry[]): [Entry, Entry] {
+function pickSeeds<Data>(tree: Tree<Data>, entries: Entry<Data>[]): [Entry<Data>, Entry<Data>];
+function pickSeeds<Data>(tree: Tree<Data>, entries: Entry<Data>[]): [Entry<Data>, Entry<Data>] {
     let maxWastedArea = Number.NEGATIVE_INFINITY;
-    let pair: [Entry, Entry] | undefined = undefined;
+    let pair: [Entry<Data>, Entry<Data>] | undefined = undefined;
     for (let i = 0; i < entries.length; i++) {
         for (let j = 0; j < entries.length; j++) {
             if (i !== j) {
@@ -138,10 +140,10 @@ function pickSeeds<Data, Entry extends LeafEntry<Data> | BranchEntry<Data>>(tree
 
 function pickNext<Data>(tree: Tree<Data>, left: Bounded, right: Bounded, entries: Set<LeafEntry<Data>>): LeafEntry<Data>;
 function pickNext<Data>(tree: Tree<Data>, left: Bounded, right: Bounded, entries: Set<BranchEntry<Data>>): BranchEntry<Data>;
-function pickNext<Data, Entry extends LeafEntry<Data> | BranchEntry<Data>>(tree: Tree<Data>, left: Bounded, right: Bounded, entries: Set<Entry>): Entry;
-function pickNext<Data, Entry extends LeafEntry<Data> | BranchEntry<Data>>(tree: Tree<Data>, left: Bounded, right: Bounded, entries: Set<Entry>): Entry {
+function pickNext<Data>(tree: Tree<Data>, left: Bounded, right: Bounded, entries: Set<Entry<Data>>): Entry<Data>;
+function pickNext<Data>(tree: Tree<Data>, left: Bounded, right: Bounded, entries: Set<Entry<Data>>): Entry<Data> {
     let maxDifference = Number.NEGATIVE_INFINITY;
-    let selectedNode: Entry | undefined = undefined;
+    let selectedNode: Entry<Data> | undefined = undefined;
     const leftArea = area(left.bounds, tree.dimensions);
     const rightArea = area(right.bounds, tree.dimensions);
     for (const entry of entries) {
@@ -161,9 +163,10 @@ function pickNext<Data, Entry extends LeafEntry<Data> | BranchEntry<Data>>(tree:
 
 function quadraticSplit<Data>(tree: Tree<Data>, entries: LeafEntry<Data>[]): [LeafEntry<Data>[], LeafEntry<Data>[]];
 function quadraticSplit<Data>(tree: Tree<Data>, entries: BranchEntry<Data>[]): [BranchEntry<Data>[], BranchEntry<Data>[]];
-function quadraticSplit<Data, Entry extends LeafEntry<Data> | BranchEntry<Data>>(tree: Tree<Data>, entries: Entry[]): [Entry[], Entry[]] {
+function quadraticSplit<Data>(tree: Tree<Data>, entries: Entry<Data>[]): [Entry<Data>[], Entry<Data>[]];
+function quadraticSplit<Data>(tree: Tree<Data>, entries: Entry<Data>[]): [Entry<Data>[], Entry<Data>[]] {
     interface Split extends Bounded {
-        entries: Entry[];
+        entries: Entry<Data>[];
     }
 
     const seeds = pickSeeds(tree, entries);
