@@ -2,6 +2,10 @@ type Bounds = number[];
 
 type TreeNode<Pointer> = Branch<Pointer> | Leaf<Pointer>;
 
+interface Bounded {
+    bounds: Bounds;
+}
+
 interface BranchChild<Pointer> {
     bounds: Bounds;
     node: TreeNode<Pointer>;
@@ -12,6 +16,13 @@ interface Branch<Pointer> {
     children: BranchChild<Pointer>[];
 }
 
+type Child<Pointer> = BranchChild<Pointer> | LeafChild<Pointer>;
+
+interface Parent<Pointer> {
+    bounds: Bounds;
+    children: Child<Pointer>[];
+}
+
 interface LeafChild<Pointer> {
     bounds: Bounds;
     entry: Pointer;
@@ -20,11 +31,6 @@ interface LeafChild<Pointer> {
 interface Leaf<Pointer> {
     type: 'leaf';
     children: LeafChild<Pointer>[];
-}
-
-interface LeafParent<Pointer> {
-    bounds: Bounds;
-    node: Leaf<Pointer>;
 }
 
 interface LeafPath<Pointer> {
@@ -60,6 +66,15 @@ function combine(a: Bounds, b: Bounds, dimensions: number): Bounds {
     for (let i = 0; i < dimensions; i++) {
         bounds[i * 2] = Math.min(a[i * 2], b[i * 2]);
         bounds[i * 2 + 1] = Math.max(a[i * 2 + 1], b[i * 2 + 1]);
+    }
+    return bounds;
+}
+
+function enclose(boundsList: Bounds[], dimensions: number): Bounds {
+    const bounds: Bounds = [];
+    for (let i = 0; i < dimensions; i++) {
+        bounds[i * 2] = Math.min(...boundsList.map((bounds) => bounds[i * 2]));
+        bounds[i * 2 + 1] = Math.max(...boundsList.map((bounds) => bounds[i * 2 + 1]));
     }
     return bounds;
 }
@@ -101,9 +116,12 @@ function chooseLeaf<Pointer>(tree: Tree<Pointer>, bounds: Bounds): LeafPath<Poin
     return { parents, leaf: node };
 }
 
-function pickSeeds<Pointer>(tree: Tree<Pointer>, entries: LeafChild<Pointer>[]): [LeafChild<Pointer>, LeafChild<Pointer>] {
+function pickSeeds<Pointer>(tree: Tree<Pointer>, entries: BranchChild<Pointer>[]): [BranchChild<Pointer>, BranchChild<Pointer>];
+function pickSeeds<Pointer>(tree: Tree<Pointer>, entries: LeafChild<Pointer>[]): [LeafChild<Pointer>, LeafChild<Pointer>];
+function pickSeeds<Pointer>(tree: Tree<Pointer>, entries: Child<Pointer>[]): [Child<Pointer>, Child<Pointer>];
+function pickSeeds<Pointer>(tree: Tree<Pointer>, entries: Child<Pointer>[]): [Child<Pointer>, Child<Pointer>] {
     let maxWastedArea = Number.NEGATIVE_INFINITY;
-    let pair: [LeafChild<Pointer>, LeafChild<Pointer>] | undefined = undefined;
+    let pair: [Child<Pointer>, Child<Pointer>] | undefined = undefined;
     for (let i = 0; i < entries.length; i++) {
         for (let j = 0; j < entries.length; j++) {
             if (i !== j) {
@@ -124,9 +142,9 @@ function pickSeeds<Pointer>(tree: Tree<Pointer>, entries: LeafChild<Pointer>[]):
     }
 }
 
-function pickNext<Pointer>(tree: Tree<Pointer>, left: LeafParent<Pointer>, right: LeafParent<Pointer>, entries: Set<LeafChild<Pointer>>): LeafChild<Pointer> {
+function pickNext<Pointer>(tree: Tree<Pointer>, left: Parent<Pointer>, right: Parent<Pointer>, entries: Set<Child<Pointer>>): Child<Pointer> {
     let maxDifference = Number.NEGATIVE_INFINITY;
-    let selectedNode: LeafChild<Pointer> | undefined = undefined;
+    let selectedNode: Child<Pointer> | undefined = undefined;
     const leftArea = area(left.bounds, tree.dimensions);
     const rightArea = area(right.bounds, tree.dimensions);
     for (const entry of entries) {
@@ -144,30 +162,29 @@ function pickNext<Pointer>(tree: Tree<Pointer>, left: LeafParent<Pointer>, right
     }
 }
 
-function quadraticSplit<Pointer>(tree: Tree<Pointer>, leaf: Leaf<Pointer>): [LeafParent<Pointer>, LeafParent<Pointer>] {
-    const seeds = pickSeeds(tree, leaf.children);
-    const left: LeafParent<Pointer> = {
+function quadraticSplit<Pointer>(tree: Tree<Pointer>, node: Leaf<Pointer>): [Leaf<Pointer>, Leaf<Pointer>];
+function quadraticSplit<Pointer>(tree: Tree<Pointer>, node: Branch<Pointer>): [Branch<Pointer>, Branch<Pointer>];
+function quadraticSplit<Pointer>(tree: Tree<Pointer>, node: TreeNode<Pointer>): [TreeNode<Pointer>, TreeNode<Pointer>] {
+    const seeds = pickSeeds(tree, node.children);
+    const left: TreeNode<Pointer> & Bounded = {
+        type: node.type,
         bounds: seeds[0].bounds,
-        node: {
-            type: 'leaf',
-            children: [seeds[0]]
-        }
+        children: [seeds[0]]
     };
-    const right: LeafParent<Pointer> = {
+    const right: TreeNode<Pointer> & Bounded = {
+        type: node.type,
         bounds: seeds[1].bounds,
-        node: {
-            type: 'leaf',
-            children: [seeds[1]]
-        }
+        children: [seeds[1]]
     };
-    const entries = new Set(leaf.children.filter((entry) => entry !== seeds[0] && entry !== seeds[1]));
+    const nodeChildren: Child<Pointer>[] = node.children;
+    const entries = new Set(nodeChildren.filter((entry) => entry !== seeds[0] && entry !== seeds[1]));
     while (entries.size >= 1) {
         const next = pickNext(tree, left, right, entries);
         const leftAreaBefore = area(left.bounds, tree.dimensions)
         const rightAreaBefore = area(right.bounds, tree.dimensions)
         const enlargementLeft = area(combine(left.bounds, next.bounds, tree.dimensions), tree.dimensions) - leftAreaBefore;
         const enlargementRight = area(combine(right.bounds, next.bounds, tree.dimensions), tree.dimensions) - rightAreaBefore;
-        let addTo: LeafParent<Pointer>;
+        let addTo: Parent<Pointer>;
         if (enlargementLeft < enlargementRight) {
             addTo = left;
         } else if (enlargementLeft > enlargementRight) {
@@ -178,23 +195,46 @@ function quadraticSplit<Pointer>(tree: Tree<Pointer>, leaf: Leaf<Pointer>): [Lea
             } else if (leftAreaBefore > rightAreaBefore) {
                 addTo = right;
             } else {
-                if (left.node.children.length < right.node.children.length) {
+                if (left.children.length < right.children.length) {
                     addTo = left;
                 } else {
                     addTo = right;
                 }
             }
         }
-        addTo.node.children.push(next);
+        addTo.children.push(next);
         addTo.bounds = combine(addTo.bounds, next.bounds, tree.dimensions);
         entries.delete(next);
     }
     return [left, right];
 }
 
-function adjustTree<Pointer>(tree: Tree<Pointer>, path: LeafPath<Pointer>, n1: Leaf<Pointer>, n2?: Leaf<Pointer>) {
-    if (tree.root === n1) {
-
+function adjustTree<Pointer>(tree: Tree<Pointer>, path: LeafPath<Pointer>, n1: TreeNode<Pointer>, n2?: TreeNode<Pointer>) {
+    while (tree.root !== n1) {
+        const parent = path.parents.pop();
+        if (parent === undefined) {
+            throw new Error('Parent path too short.');
+        }
+        const n1Index = parent.children.findIndex((child) => child.node === n1);
+        const n1Children: Bounded[] = n1.children;
+        parent.children[n1Index].bounds = combine(parent.children[n1Index].bounds, enclose(n1Children.map((child) => child.bounds), tree.dimensions), tree.dimensions);
+        if (n2) {
+            const n2Children: Bounded[] = n2.children;
+            const entry: BranchChild<Pointer> = {
+                bounds: enclose(n2Children.map((child) => child.bounds), tree.dimensions),
+                node: n2
+            };
+            if (parent.children.length < tree.maximumEntries) {
+                parent.children.push(entry);
+                n1 = parent;
+                n2 = undefined;
+            } else {
+                parent.children.push(entry);
+                const [p, pp] = quadraticSplit(tree, parent);
+                n1 = p;
+                n2 = pp;
+            }
+        }
     }
 }
 
