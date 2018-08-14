@@ -128,6 +128,8 @@ function renderNode(context: CanvasRenderingContext2D, node: TreeNode<string>, d
     context.font = '24px serif';
     context.textAlign = 'start';
     context.textBaseline = 'top';
+
+    // TODO: check color, text doesn't make sense
     context.fillStyle = colors[depth % colors.length];
     context.strokeStyle = colors[depth % colors.length];
 
