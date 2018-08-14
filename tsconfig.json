@@ -11,6 +11,6 @@
         "outDir": "lib"
     },
     "files": [
-        "**/*.ts"
+        "src/**/*"
     ]
 }
