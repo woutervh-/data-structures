@@ -3,9 +3,14 @@
   "version": "0.1.0",
   "description": "",
   "main": "none",
-  "dependencies": {},
+  "dependencies": {
+    "react": "^16.4.2",
+    "react-dom": "^16.4.2"
+  },
   "devDependencies": {
     "@types/node": "^8.9.3",
+    "@types/react": "^16.4.10",
+    "@types/react-dom": "^16.0.7",
     "css-loader": "^1.0.0",
     "html-webpack-plugin": "^3.2.0",
     "style-loader": "^0.22.1",
@@ -17,7 +22,7 @@
     "webpack-dev-server": "^3.1.5"
   },
   "scripts": {
-    "start:r-tree": "webpack-dev-server src/r-tree/app.ts --mode development",
+    "start:r-tree": "webpack-dev-server src/r-tree/app.tsx --mode development",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {

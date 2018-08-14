@@ -9,7 +9,8 @@
         "noImplicitAny": true,
         "strict": true,
         "sourceMap": true,
-        "outDir": "lib"
+        "outDir": "lib",
+        "jsx": "react"
     },
     "include": [
         "src/**/*"

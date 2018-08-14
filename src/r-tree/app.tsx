@@ -1,16 +1,20 @@
-import { Tree, insert, TreeNode, search, Bounds, makeTree } from './index';
+import * as React from 'react';
+import { Tree, insert, TreeNode, search, Bounds, makeTree } from './in-place';
 import './style.css';
 
 const colors = [
-    'rgb(1, 22, 39)',
-    'rgb(170, 0, 0)',
-    'rgb(46, 196, 182)',
-    'rgb(255, 204, 0)',
-    'rgb(169, 155, 242)'
+    '#331a00',
+    '#2288ee',
+    '#cc11dd',
+    '#db0e00',
+    '#6e7700',
+    '#44ba97',
+    '#ff9977',
+    '#aabb88',
+    '#ffe7a0'
 ];
 
 const myTree = makeTree<string>(2, 2, 4);
-// const myTree: Tree<string> = { "root": { "type": "branch", "entries": [{ "bounds": [257, 859, 107, 439], "child": { "type": "branch", "entries": [{ "bounds": [689, 693, 107, 439], "child": { "type": "leaf", "entries": [{ "bounds": [693, 693, 107, 107], "data": "P4" }, { "bounds": [689, 689, 439, 439], "data": "P5" }] } }, { "bounds": [610, 859, 276, 408], "child": { "type": "leaf", "entries": [{ "bounds": [859, 859, 376, 376], "data": "P6" }, { "bounds": [610, 610, 408, 408], "data": "P8" }, { "bounds": [806, 806, 276, 276], "data": "P3" }] } }, { "bounds": [257, 601, 118, 339], "child": { "type": "leaf", "entries": [{ "bounds": [490, 490, 118, 118], "data": "P1" }, { "bounds": [601, 601, 324, 324], "data": "P7" }, { "bounds": [257, 257, 339, 339], "data": "P6" }, { "bounds": [401, 401, 269, 269], "data": "P2" }] } }] } }, { "bounds": [1037, 1507, 118, 442], "child": { "type": "branch", "entries": [{ "bounds": [1431, 1507, 127, 380], "child": { "type": "leaf", "entries": [{ "bounds": [1431, 1431, 127, 127], "data": "P4" }, { "bounds": [1507, 1507, 380, 380], "data": "P3" }] } }, { "bounds": [1037, 1359, 118, 442], "child": { "type": "leaf", "entries": [{ "bounds": [1037, 1037, 422, 422], "data": "P2" }, { "bounds": [1359, 1359, 442, 442], "data": "P5" }, { "bounds": [1146, 1146, 293, 293], "data": "P1" }, { "bounds": [1054, 1054, 118, 118], "data": "P7" }] } }] } }] }, "dimensions": 2, "minimumEntries": 2, "maximumEntries": 4 };
 
 let counter = 0;
 let searchBounds: Bounds | undefined = undefined;
@@ -140,7 +144,7 @@ function renderNode(context: CanvasRenderingContext2D, node: TreeNode<string>, d
                 context.arc(entry.bounds[0], entry.bounds[2], 4, 0, 2 * Math.PI);
                 context.fill();
                 context.closePath();
-                context.fillText(entry.data, entry.bounds[0], entry.bounds[2]);
+                // context.fillText(entry.data, entry.bounds[0], entry.bounds[2]);
             }
         }
     } else {

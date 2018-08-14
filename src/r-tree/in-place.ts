@@ -31,12 +31,17 @@ export interface Tree<Data> {
     maximumEntries: number;
 }
 
-export interface LeafPath<Data> {
+type Entry<Data> = LeafEntry<Data> | BranchEntry<Data>;
+
+interface LeafPath<Data> {
     branches: BranchNode<Data>[];
     leaf: LeafNode<Data>;
 }
 
-export type Entry<Data> = LeafEntry<Data> | BranchEntry<Data>;
+interface Split<Data> {
+    bounds: Bounds;
+    entries: Entry<Data>[];
+}
 
 function overlaps(a: Bounds, b: Bounds, dimensions: number): boolean {
     // Checks if bounds overlap (inclusively borders)
@@ -154,22 +159,18 @@ function quadraticSplit<Data>(tree: Tree<Data>, entries: LeafEntry<Data>[]): [Le
 function quadraticSplit<Data>(tree: Tree<Data>, entries: BranchEntry<Data>[]): [BranchEntry<Data>[], BranchEntry<Data>[]];
 function quadraticSplit<Data>(tree: Tree<Data>, entries: Entry<Data>[]): [Entry<Data>[], Entry<Data>[]];
 function quadraticSplit<Data>(tree: Tree<Data>, entries: Entry<Data>[]): [Entry<Data>[], Entry<Data>[]] {
-    interface Split extends Bounded {
-        entries: Entry<Data>[];
-    }
-
     const seeds = pickSeeds(tree, entries);
-    const left: Split = {
+    const left: Split<Data> = {
         bounds: seeds[0].bounds,
         entries: [seeds[0]]
     };
-    const right: Split = {
+    const right: Split<Data> = {
         bounds: seeds[1].bounds,
         entries: [seeds[1]]
     };
     const candidates = new Set(entries.filter((entry) => entry !== seeds[0] && entry !== seeds[1]));
     while (candidates.size >= 1) {
-        let addTo: Split;
+        let addTo: Split<Data>;
         let next: Entry<Data>;
         if (left.entries.length + candidates.size === tree.minimumEntries) {
             next = candidates.values().next().value;
