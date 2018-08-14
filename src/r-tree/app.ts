@@ -128,6 +128,8 @@ function renderNode(context: CanvasRenderingContext2D, node: TreeNode<string>, d
     context.font = '24px serif';
     context.textAlign = 'start';
     context.textBaseline = 'top';
+    context.fillStyle = colors[depth % colors.length];
+    context.strokeStyle = colors[depth % colors.length];
 
     if (node.type === 'leaf') {
         for (const entry of node.entries) {
@@ -141,17 +143,14 @@ function renderNode(context: CanvasRenderingContext2D, node: TreeNode<string>, d
         }
     } else {
         for (const entry of node.entries) {
+            context.fillStyle = colors[depth % colors.length];
+            context.strokeStyle = colors[depth % colors.length];
+            context.beginPath();
+            context.rect(entry.bounds[0], entry.bounds[2], (entry.bounds[1] - entry.bounds[0]), (entry.bounds[3] - entry.bounds[2]));
+            context.stroke();
+            context.closePath();
             renderNode(context, entry.child, depth + 1);
         }
-    }
-
-    context.fillStyle = colors[depth % colors.length];
-    context.strokeStyle = colors[depth % colors.length];
-    for (const entry of node.entries) {
-        context.beginPath();
-        context.rect(entry.bounds[0], entry.bounds[2], (entry.bounds[1] - entry.bounds[0]), (entry.bounds[3] - entry.bounds[2]));
-        context.stroke();
-        context.closePath();
     }
 }
 
