@@ -1,4 +1,4 @@
-import { Tree, insert, TreeNode, search, Bounds } from './index';
+import { Tree, insert, TreeNode, search, Bounds, makeTree } from './index';
 import './style.css';
 
 const colors = [
@@ -9,11 +9,12 @@ const colors = [
     'rgb(169, 155, 242)'
 ];
 
-// const myTree = makeTree<string>(2, 4);
-const myTree: Tree<string> = { "root": { "type": "branch", "entries": [{ "bounds": [257, 859, 107, 439], "child": { "type": "branch", "entries": [{ "bounds": [689, 693, 107, 439], "child": { "type": "leaf", "entries": [{ "bounds": [693, 693, 107, 107], "data": "P4" }, { "bounds": [689, 689, 439, 439], "data": "P5" }] } }, { "bounds": [610, 859, 276, 408], "child": { "type": "leaf", "entries": [{ "bounds": [859, 859, 376, 376], "data": "P6" }, { "bounds": [610, 610, 408, 408], "data": "P8" }, { "bounds": [806, 806, 276, 276], "data": "P3" }] } }, { "bounds": [257, 601, 118, 339], "child": { "type": "leaf", "entries": [{ "bounds": [490, 490, 118, 118], "data": "P1" }, { "bounds": [601, 601, 324, 324], "data": "P7" }, { "bounds": [257, 257, 339, 339], "data": "P6" }, { "bounds": [401, 401, 269, 269], "data": "P2" }] } }] } }, { "bounds": [1037, 1507, 118, 442], "child": { "type": "branch", "entries": [{ "bounds": [1431, 1507, 127, 380], "child": { "type": "leaf", "entries": [{ "bounds": [1431, 1431, 127, 127], "data": "P4" }, { "bounds": [1507, 1507, 380, 380], "data": "P3" }] } }, { "bounds": [1037, 1359, 118, 442], "child": { "type": "leaf", "entries": [{ "bounds": [1037, 1037, 422, 422], "data": "P2" }, { "bounds": [1359, 1359, 442, 442], "data": "P5" }, { "bounds": [1146, 1146, 293, 293], "data": "P1" }, { "bounds": [1054, 1054, 118, 118], "data": "P7" }] } }] } }] }, "dimensions": 2, "minimumEntries": 2, "maximumEntries": 4 };
+const myTree = makeTree<string>(2, 2, 4);
+// const myTree: Tree<string> = { "root": { "type": "branch", "entries": [{ "bounds": [257, 859, 107, 439], "child": { "type": "branch", "entries": [{ "bounds": [689, 693, 107, 439], "child": { "type": "leaf", "entries": [{ "bounds": [693, 693, 107, 107], "data": "P4" }, { "bounds": [689, 689, 439, 439], "data": "P5" }] } }, { "bounds": [610, 859, 276, 408], "child": { "type": "leaf", "entries": [{ "bounds": [859, 859, 376, 376], "data": "P6" }, { "bounds": [610, 610, 408, 408], "data": "P8" }, { "bounds": [806, 806, 276, 276], "data": "P3" }] } }, { "bounds": [257, 601, 118, 339], "child": { "type": "leaf", "entries": [{ "bounds": [490, 490, 118, 118], "data": "P1" }, { "bounds": [601, 601, 324, 324], "data": "P7" }, { "bounds": [257, 257, 339, 339], "data": "P6" }, { "bounds": [401, 401, 269, 269], "data": "P2" }] } }] } }, { "bounds": [1037, 1507, 118, 442], "child": { "type": "branch", "entries": [{ "bounds": [1431, 1507, 127, 380], "child": { "type": "leaf", "entries": [{ "bounds": [1431, 1431, 127, 127], "data": "P4" }, { "bounds": [1507, 1507, 380, 380], "data": "P3" }] } }, { "bounds": [1037, 1359, 118, 442], "child": { "type": "leaf", "entries": [{ "bounds": [1037, 1037, 422, 422], "data": "P2" }, { "bounds": [1359, 1359, 442, 442], "data": "P5" }, { "bounds": [1146, 1146, 293, 293], "data": "P1" }, { "bounds": [1054, 1054, 118, 118], "data": "P7" }] } }] } }] }, "dimensions": 2, "minimumEntries": 2, "maximumEntries": 4 };
 
 let counter = 0;
 let searchBounds: Bounds | undefined = undefined;
+let searchResults: Set<string> | undefined = undefined;
 
 const context = (function () {
     const canvas = document.createElement('canvas');
@@ -42,6 +43,7 @@ const context = (function () {
                 if (Math.abs(currentX - startX) + Math.abs(currentY - startY) >= 5) {
                     dragging = true;
                     searchBounds = [Math.min(startX, currentX), Math.max(startX, currentX), Math.min(startY, currentY), Math.max(startY, currentY)];
+                    searchResults = new Set(search(myTree, myTree.root, searchBounds));
                 }
             }
         }
@@ -49,6 +51,7 @@ const context = (function () {
         function onMouseUp(event: MouseEvent) {
             if (down) {
                 searchBounds = undefined;
+                searchResults = undefined;
                 if (!dragging) {
                     insert(myTree, { bounds: [event.clientX, event.clientX, event.clientY, event.clientY], data: `P${++counter}` });
                 }
@@ -128,12 +131,13 @@ function renderNode(context: CanvasRenderingContext2D, node: TreeNode<string>, d
 
     if (node.type === 'leaf') {
         for (const entry of node.entries) {
-            // TODO: only render if not in search results
-            context.beginPath();
-            context.arc(entry.bounds[0], entry.bounds[2], 4, 0, 2 * Math.PI);
-            context.fill();
-            context.closePath();
-            context.fillText(entry.data, entry.bounds[0], entry.bounds[2]);
+            if (searchResults === undefined || searchResults.has(entry.data)) {
+                context.beginPath();
+                context.arc(entry.bounds[0], entry.bounds[2], 4, 0, 2 * Math.PI);
+                context.fill();
+                context.closePath();
+                context.fillText(entry.data, entry.bounds[0], entry.bounds[2]);
+            }
         }
     } else {
         for (const entry of node.entries) {
