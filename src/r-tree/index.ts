@@ -1,41 +1,42 @@
-type Bounds = number[];
+export type Bounds = number[];
 
-interface Bounded {
+export interface Bounded {
     bounds: Bounds;
 }
 
-interface LeafEntry<Data> extends Bounded {
+export interface LeafEntry<Data> extends Bounded {
     data: Data;
 }
 
-interface LeafNode<Data> {
+export interface LeafNode<Data> {
     type: 'leaf';
     entries: LeafEntry<Data>[];
 }
 
-interface BranchEntry<Data> extends Bounded {
+export interface BranchEntry<Data> extends Bounded {
     child: TreeNode<Data>;
 }
 
-interface BranchNode<Data> {
+export interface BranchNode<Data> {
     type: 'branch';
     entries: BranchEntry<Data>[];
 }
 
-type TreeNode<Data> = BranchNode<Data> | LeafNode<Data>;
+export type TreeNode<Data> = BranchNode<Data> | LeafNode<Data>;
 
-interface Tree<Data> {
+export interface Tree<Data> {
     root: TreeNode<Data>;
     dimensions: number;
+    minimumEntries: number;
     maximumEntries: number;
 }
 
-interface LeafPath<Data> {
+export interface LeafPath<Data> {
     branches: BranchNode<Data>[];
     leaf: LeafNode<Data>;
 }
 
-type Entry<Data> = LeafEntry<Data> | BranchEntry<Data>;
+export type Entry<Data> = LeafEntry<Data> | BranchEntry<Data>;
 
 function overlaps(a: Bounds, b: Bounds, dimensions: number): boolean {
     // Checks if bounds overlap (inclusively borders)
@@ -71,19 +72,6 @@ function enclose(boundsList: Bounds[], dimensions: number): Bounds {
         bounds[i * 2 + 1] = Math.max(...boundsList.map((bounds) => bounds[i * 2 + 1]));
     }
     return bounds;
-}
-
-function search<Data>(tree: Tree<Data>, node: TreeNode<Data>, bounds: Bounds): Data[] {
-    if (node.type === 'leaf') {
-        return node.entries
-            .filter((entry) => overlaps(bounds, entry.bounds, tree.dimensions))
-            .map((entry) => entry.data);
-    } else {
-        return node.entries
-            .filter((entry) => overlaps(bounds, entry.bounds, tree.dimensions))
-            .map((entry) => search(tree, entry.child, bounds))
-            .reduce((accumulator, data) => accumulator.concat(data), []);
-    }
 }
 
 function chooseLeaf<Data>(tree: Tree<Data>, bounds: Bounds): LeafPath<Data> {
@@ -181,26 +169,35 @@ function quadraticSplit<Data>(tree: Tree<Data>, entries: Entry<Data>[]): [Entry<
     };
     const candidates = new Set(entries.filter((entry) => entry !== seeds[0] && entry !== seeds[1]));
     while (candidates.size >= 1) {
-        const next = pickNext(tree, left, right, candidates);
-        const leftAreaBefore = area(left.bounds, tree.dimensions)
-        const rightAreaBefore = area(right.bounds, tree.dimensions)
-        const enlargementLeft = area(combine(left.bounds, next.bounds, tree.dimensions), tree.dimensions) - leftAreaBefore;
-        const enlargementRight = area(combine(right.bounds, next.bounds, tree.dimensions), tree.dimensions) - rightAreaBefore;
         let addTo: Split;
-        if (enlargementLeft < enlargementRight) {
+        let next: Entry<Data>;
+        if (left.entries.length + candidates.size === tree.minimumEntries) {
+            next = candidates.values().next().value;
             addTo = left;
-        } else if (enlargementLeft > enlargementRight) {
+        } else if (right.entries.length + candidates.size === tree.minimumEntries) {
+            next = candidates.values().next().value;
             addTo = right;
         } else {
-            if (leftAreaBefore < rightAreaBefore) {
+            next = pickNext(tree, left, right, candidates);
+            const leftAreaBefore = area(left.bounds, tree.dimensions)
+            const rightAreaBefore = area(right.bounds, tree.dimensions)
+            const enlargementLeft = area(combine(left.bounds, next.bounds, tree.dimensions), tree.dimensions) - leftAreaBefore;
+            const enlargementRight = area(combine(right.bounds, next.bounds, tree.dimensions), tree.dimensions) - rightAreaBefore;
+            if (enlargementLeft < enlargementRight) {
                 addTo = left;
-            } else if (leftAreaBefore > rightAreaBefore) {
+            } else if (enlargementLeft > enlargementRight) {
                 addTo = right;
             } else {
-                if (left.entries.length < right.entries.length) {
+                if (leftAreaBefore < rightAreaBefore) {
                     addTo = left;
-                } else {
+                } else if (leftAreaBefore > rightAreaBefore) {
                     addTo = right;
+                } else {
+                    if (left.entries.length < right.entries.length) {
+                        addTo = left;
+                    } else {
+                        addTo = right;
+                    }
                 }
             }
         }
@@ -220,6 +217,7 @@ function adjustTree<Data>(tree: Tree<Data>, path: LeafPath<Data>, n1: TreeNode<D
         const n1Index = parent.entries.findIndex((entry) => entry.child === n1);
         const n1Entries: Bounded[] = n1.entries;
         parent.entries[n1Index].bounds = enclose(n1Entries.map((entry) => entry.bounds), tree.dimensions);
+        n1 = parent;
         if (n2) {
             const n2Entries: Bounded[] = n2.entries;
             const entry: BranchEntry<Data> = {
@@ -228,13 +226,11 @@ function adjustTree<Data>(tree: Tree<Data>, path: LeafPath<Data>, n1: TreeNode<D
             };
             if (parent.entries.length < tree.maximumEntries) {
                 parent.entries.push(entry);
-                n1 = parent;
                 n2 = undefined;
             } else {
                 parent.entries.push(entry);
                 const [p, pp] = quadraticSplit(tree, parent.entries);
                 parent.entries = p;
-                n1 = parent;
                 n2 = {
                     type: 'branch',
                     entries: pp
@@ -247,7 +243,17 @@ function adjustTree<Data>(tree: Tree<Data>, path: LeafPath<Data>, n1: TreeNode<D
     }
 }
 
-function insert<Data>(tree: Tree<Data>, entry: LeafEntry<Data>) {
+export function height(tree: Tree<any>): number {
+    let node: TreeNode<any> = tree.root;
+    let height = 1;
+    while (node.type !== 'leaf') {
+        node = node.entries[0].child;
+        height += 1;
+    }
+    return height;
+}
+
+export function insert<Data>(tree: Tree<Data>, entry: LeafEntry<Data>) {
     const path = chooseLeaf(tree, entry.bounds);
     const n1 = path.leaf;
     let n2: LeafNode<Data> | undefined = undefined;
@@ -277,22 +283,27 @@ function insert<Data>(tree: Tree<Data>, entry: LeafEntry<Data>) {
     }
 }
 
-const myTree: Tree<string> = {
-    root: {
-        type: 'leaf',
-        entries: [{
-            bounds: [0, 1, 0, 1],
-            data: 'R1'
-        }]
-    },
-    dimensions: 2,
-    maximumEntries: 4
-};
+export function search<Data>(tree: Tree<Data>, node: TreeNode<Data>, bounds: Bounds): Data[] {
+    if (node.type === 'leaf') {
+        return node.entries
+            .filter((entry) => overlaps(bounds, entry.bounds, tree.dimensions))
+            .map((entry) => entry.data);
+    } else {
+        return node.entries
+            .filter((entry) => overlaps(bounds, entry.bounds, tree.dimensions))
+            .map((entry) => search(tree, entry.child, bounds))
+            .reduce((accumulator, data) => accumulator.concat(data), []);
+    }
+}
 
-insert(myTree, { bounds: [1, 2, 1, 2], data: 'R2' });
-insert(myTree, { bounds: [2, 3, 2, 3], data: 'R3' });
-insert(myTree, { bounds: [3, 4, 3, 4], data: 'R4' });
-insert(myTree, { bounds: [4, 5, 4, 5], data: 'R5' });
-
-console.log(JSON.stringify(myTree, null, 2));
-console.log(search(myTree, myTree.root, [0, 3, 0, 3]));
+export function makeTree<Data>(dimensions: number, minimumEntries: number, maximumEntries: number): Tree<Data> {
+    return {
+        root: {
+            type: 'leaf',
+            entries: []
+        },
+        dimensions,
+        minimumEntries,
+        maximumEntries
+    };
+}
