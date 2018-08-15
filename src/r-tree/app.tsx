@@ -1,6 +1,8 @@
 import * as React from 'react';
-import { Tree, insert, TreeNode, search, Bounds, makeTree } from './in-place';
+import { Tree, insert, TreeNode, search, makeTree } from './in-place';
 import './style.css';
+import { Bounds } from './bounds';
+import './append-only';
 
 const colors = [
     '#331a00',
@@ -14,8 +16,7 @@ const colors = [
     '#ffe7a0'
 ];
 
-const myTree = makeTree<string>(2, 2, 4);
-
+let myTree = makeTree<string>(2, 2, 4);
 let counter = 0;
 let searchBounds: Bounds | undefined = undefined;
 let searchResults: Set<string> | undefined = undefined;
@@ -76,22 +77,40 @@ const context = (function () {
     {
         const button = document.createElement('button');
         button.innerText = 'Log tree';
-        button.addEventListener('click', () => console.log(JSON.parse(JSON.stringify(myTree))));
+        button.addEventListener('click', () => {
+            function formatSize(bytes: number): string {
+                const sizes = ['bytes', 'KiB', 'MiB', 'GiB'];
+                const factor = 1024;
+                let index = 0;
+                while (bytes >= factor && index < sizes.length) {
+                    bytes /= factor;
+                    index += 1;
+                }
+                return `${Math.round(bytes)} ${sizes[index]}`;
+            }
+
+            const stringified = JSON.stringify(myTree);
+            console.log(`${stringified.length} characters. Roughly ${formatSize(stringified.length)}.`);
+            console.log(JSON.parse(stringified));
+        });
         info.appendChild(button);
     }
     {
         const button = document.createElement('button');
-        button.innerText = 'Insert 1000 random';
+        button.innerText = 'Insert 100,000 random';
         button.addEventListener('click', () => {
-            const start = performance.now();
-            for (let i = 0; i < 1000; i++) {
+            for (let i = 0; i < 100000; i++) {
                 const x = context.canvas.width * Math.random();
                 const y = context.canvas.height * Math.random();
                 insert(myTree, { bounds: [x, x, y, y], data: `P${++counter}` });
             }
-            const end = performance.now();
-            console.log(end - start);
         });
+        info.appendChild(button);
+    }
+    {
+        const button = document.createElement('button');
+        button.innerText = 'Clear';
+        button.addEventListener('click', () => myTree = makeTree<string>(2, 2, 4));
         info.appendChild(button);
     }
     document.body.appendChild(info);
@@ -139,7 +158,8 @@ function renderNode(context: CanvasRenderingContext2D, node: TreeNode<string>, d
 
     if (node.type === 'leaf') {
         for (const entry of node.entries) {
-            if (searchResults === undefined || searchResults.has(entry.data)) {
+            // if (searchResults === undefined || searchResults.has(entry.data)) {
+            if (searchResults !== undefined && searchResults.has(entry.data)) {
                 context.beginPath();
                 context.arc(entry.bounds[0], entry.bounds[2], 4, 0, 2 * Math.PI);
                 context.fill();
@@ -149,12 +169,12 @@ function renderNode(context: CanvasRenderingContext2D, node: TreeNode<string>, d
         }
     } else {
         for (const entry of node.entries) {
-            context.fillStyle = colors[depth % colors.length];
-            context.strokeStyle = colors[depth % colors.length];
-            context.beginPath();
-            context.rect(entry.bounds[0], entry.bounds[2], (entry.bounds[1] - entry.bounds[0]), (entry.bounds[3] - entry.bounds[2]));
-            context.stroke();
-            context.closePath();
+            // context.fillStyle = colors[depth % colors.length];
+            // context.strokeStyle = colors[depth % colors.length];
+            // context.beginPath();
+            // context.rect(entry.bounds[0], entry.bounds[2], (entry.bounds[1] - entry.bounds[0]), (entry.bounds[3] - entry.bounds[2]));
+            // context.stroke();
+            // context.closePath();
             renderNode(context, entry.child, depth + 1);
         }
     }
