@@ -97,7 +97,7 @@ function pickNext<Data>(tree: Tree<Data>, left: Bounded, right: Bounded, entries
 function pickNext<Data>(tree: Tree<Data>, left: Bounded, right: Bounded, entries: Set<Entry<Data>>): Entry<Data>;
 function pickNext<Data>(tree: Tree<Data>, left: Bounded, right: Bounded, entries: Set<Entry<Data>>): Entry<Data> {
     let maxDifference = Number.NEGATIVE_INFINITY;
-    let selectedNode: Entry<Data> | undefined = undefined;
+    let selectedEntry: Entry<Data> | undefined = undefined;
     const leftArea = area(left.bounds, tree.dimensions);
     const rightArea = area(right.bounds, tree.dimensions);
     for (const entry of entries) {
@@ -105,13 +105,13 @@ function pickNext<Data>(tree: Tree<Data>, left: Bounded, right: Bounded, entries
         const rightAreaDifference = area(combine(right.bounds, entry.bounds, tree.dimensions), tree.dimensions) - rightArea;
         const difference = Math.abs(leftAreaDifference - rightAreaDifference);
         if (difference > maxDifference) {
-            selectedNode = entry;
+            selectedEntry = entry;
         }
     }
-    if (selectedNode === undefined) {
+    if (selectedEntry === undefined) {
         throw new Error('Failed to select node.');
     } else {
-        return selectedNode;
+        return selectedEntry;
     }
 }
 
@@ -172,9 +172,6 @@ function quadraticSplit<Data>(tree: Tree<Data>, entries: Entry<Data>[]): [Entry<
 function adjustTree<Data>(tree: Tree<Data>, path: LeafPath<Data>, n1: TreeNode<Data>, n2?: TreeNode<Data>): [TreeNode<Data>, TreeNode<Data>] | undefined {
     let parent: BranchNode<Data> | undefined;
     while ((parent = path.branches.pop()) !== undefined) {
-        if (parent === undefined) {
-            throw new Error('Parent path too short.');
-        }
         const n1Index = parent.entries.findIndex((entry) => entry.child === n1);
         const n1Entries: Bounded[] = n1.entries;
         parent.entries[n1Index].bounds = enclose(n1Entries.map((entry) => entry.bounds), tree.dimensions);

@@ -1,4 +1,4 @@
-import { Bounded, Bounds, overlaps, area, combine } from './bounds';
+import { Bounded, Bounds, overlaps, area, combine, enclose } from './bounds';
 
 export interface LeafEntry<Data> extends Bounded {
     data: Data;
@@ -46,6 +46,7 @@ interface LinkRoot<Pointer> {
 }
 
 interface LinkBranch<Pointer> {
+    index: number;
     pointer: Pointer;
     node: BranchNode<Pointer>;
 }
@@ -66,6 +67,8 @@ interface Split<Data, Pointer> {
     entries: Entry<Data, Pointer>[];
 }
 
+type LowNode<Data, Pointer> = BranchNode<Pointer> | LeafNode<Data>;
+
 async function chooseLeaf<Data, Pointer>(tree: Tree<Data, Pointer>, bounds: Bounds): Promise<Path<Data, Pointer>> {
     const root = await tree.store.get(tree.root);
     if (root.type !== 'root') {
@@ -78,25 +81,28 @@ async function chooseLeaf<Data, Pointer>(tree: Tree<Data, Pointer>, bounds: Boun
     while (node.type !== 'leaf') {
         if (node.type === 'root') {
             pointer = node.pointer;
-            node = await tree.store.get(node.pointer);
+            node = await tree.store.get(pointer);
         } else {
-            linkBranches.push({ pointer, node });
             // Choose subtree
             let minArea = Number.POSITIVE_INFINITY;
             let minEnlargement = Number.POSITIVE_INFINITY;
-            const selectedEntry: BranchEntry<Pointer> = node.entries.reduce((selectedEntry, entry) => {
+            let selectedIndex: number | undefined = undefined;
+            for (let i = 0; i < node.entries.length; i++) {
+                const entry = node.entries[i];
                 const entryArea = area(entry.bounds, tree.dimensions);
                 const entryEnlargement = area(combine(entry.bounds, bounds, tree.dimensions), tree.dimensions);
                 if (entryEnlargement < minEnlargement || entryEnlargement === minEnlargement && entryArea < minArea) {
                     minArea = entryArea;
                     minEnlargement = entryEnlargement;
-                    return entry;
-                } else {
-                    return selectedEntry;
+                    selectedIndex = i;
                 }
-            });
-            pointer = selectedEntry.pointer;
-            node = await tree.store.get(selectedEntry.pointer);
+            }
+            if (selectedIndex === undefined) {
+                throw new Error('Could not select entry index.');
+            }
+            linkBranches.push({ index: selectedIndex, pointer, node });
+            pointer = node.entries[selectedIndex].pointer;
+            node = await tree.store.get(pointer);
         }
     }
     const linkLeaf: LinkLeaf<Data, Pointer> = { pointer, node };
@@ -210,39 +216,38 @@ function quadraticSplit<Data, Pointer>(tree: Tree<Data, Pointer>, entries: Entry
     return [left.entries, right.entries];
 }
 
-function adjustTree<Data, Pointer>(tree: Tree<Data, Pointer>, path: Path<Data, Pointer>, n1: TreeNode<Data, Pointer>, n2: TreeNode<Data, Pointer> | undefined): [TreeNode<Data, Pointer>, TreeNode<Data, Pointer>] | undefined {
-    let parent: BranchNode<Data> | undefined;
+async function adjustTree<Data, Pointer>(tree: Tree<Data, Pointer>, path: Path<Data, Pointer>, n1: LowNode<Data, Pointer>, n2: LowNode<Data, Pointer> | undefined): Promise<[LowNode<Data, Pointer>, LowNode<Data, Pointer> | undefined]> {
+    let parent: LinkBranch<Pointer> | undefined;
     while ((parent = path.branches.pop()) !== undefined) {
-        if (parent === undefined) {
-            throw new Error('Parent path too short.');
-        }
-        const n1Index = parent.entries.findIndex((entry) => entry.child === n1);
+        const parentEntries = [...parent.node.entries];
         const n1Entries: Bounded[] = n1.entries;
-        parent.entries[n1Index].bounds = enclose(n1Entries.map((entry) => entry.bounds), tree.dimensions);
-        n1 = parent;
+        parentEntries[parent.index] = {
+            bounds: enclose(n1Entries.map((entry) => entry.bounds), tree.dimensions),
+            pointer: await tree.store.append(n1)
+        };
         if (n2) {
             const n2Entries: Bounded[] = n2.entries;
-            const entry: BranchEntry<Data> = {
+            parentEntries.push({
                 bounds: enclose(n2Entries.map((entry) => entry.bounds), tree.dimensions),
-                child: n2
+                pointer: await tree.store.append(n2)
+            });
+        }
+        if (parentEntries.length <= tree.maximumEntries) {
+            n1 = parent.node;
+            n2 = undefined;
+        } else {
+            const [p, pp] = quadraticSplit(tree, parentEntries);
+            n1 = {
+                type: 'branch',
+                entries: p
             };
-            if (parent.entries.length < tree.maximumEntries) {
-                parent.entries.push(entry);
-                n2 = undefined;
-            } else {
-                parent.entries.push(entry);
-                const [p, pp] = quadraticSplit(tree, parent.entries);
-                parent.entries = p;
-                n2 = {
-                    type: 'branch',
-                    entries: pp
-                };
-            }
+            n2 = {
+                type: 'branch',
+                entries: pp
+            };
         }
     }
-    if (n2) {
-        return [n1, n2];
-    }
+    return [n1, n2];
 }
 
 export async function insert<Data, Pointer>(tree: Tree<Data, Pointer>, entry: LeafEntry<Data>) {
@@ -267,34 +272,29 @@ export async function insert<Data, Pointer>(tree: Tree<Data, Pointer>, entry: Le
             entries: split[1]
         };
     }
-    adjustTree(tree, path, n1, n2);
-
-    // const n1 = path.leaf;
-    // let n2: LeafNode<Data> | undefined = undefined;
-    // if (n1.entries.length < tree.maximumEntries) {
-    //     n1.entries.push(entry);
-    // } else {
-    //     n1.entries.push(entry);
-    //     const split = quadraticSplit(tree, n1.entries);
-    //     n1.entries = split[0];
-    //     n2 = {
-    //         type: 'leaf',
-    //         entries: split[1]
-    //     };
-    // }
-    // const rootSplit = adjustTree(tree, path, n1, n2);
-    // if (rootSplit) {
-    //     tree.root = {
-    //         type: 'branch',
-    //         entries: rootSplit.map<BranchEntry<Data>>((node) => {
-    //             const entries: Bounded[] = node.entries;
-    //             return {
-    //                 bounds: enclose(entries.map((entry) => entry.bounds), tree.dimensions),
-    //                 child: node
-    //             };
-    //         })
-    //     };
-    // }
+    const [r1, r2] = await adjustTree(tree, path, n1, n2);
+    let rootBranch: LowNode<Data, Pointer>;
+    if (r2) {
+        const r1Entries: Bounded[] = r1.entries;
+        const r2Entries: Bounded[] = r2.entries;
+        rootBranch = {
+            type: 'branch',
+            entries: [{
+                bounds: enclose(r1Entries.map((entry) => entry.bounds), tree.dimensions),
+                pointer: await tree.store.append(r1)
+            }, {
+                bounds: enclose(r2Entries.map((entry) => entry.bounds), tree.dimensions),
+                pointer: await tree.store.append(r2)
+            }]
+        };
+    } else {
+        rootBranch = r1;
+    }
+    const rootPointer = await tree.store.append({
+        type: 'root',
+        pointer: await tree.store.append(rootBranch)
+    });
+    return { ...tree, root: rootPointer };
 }
 
 export async function search<Data, Pointer>(tree: Tree<Data, Pointer>, searchBounds: Bounds): Promise<Data[]> {
@@ -322,61 +322,19 @@ export async function search<Data, Pointer>(tree: Tree<Data, Pointer>, searchBou
     return result;
 }
 
-// export type Bounds = number[];
-
-// export interface Bounded {
-//     bounds: Bounds;
-// }
-
-// export interface LeafEntry<Data> extends Bounded {
-//     data: Data;
-// }
-
-// export interface LeafNode<Data> {
-//     type: 'leaf';
-//     entries: LeafEntry<Data>[];
-// }
-
-// export interface BranchEntry<Data> extends Bounded {
-//     child: TreeNode<Data>;
-// }
-
-// export interface BranchNode<Data> {
-//     type: 'branch';
-//     entries: BranchEntry<Data>[];
-// }
-
-// export type TreeNode<Data> = BranchNode<Data> | LeafNode<Data>;
-
-// export interface Tree<Data> {
-//     type: 'tree';
-//     root: TreeNode<Data>;
-//     dimensions: number;
-//     minimumEntries: number;
-//     maximumEntries: number;
-// }
-
-/**
- *
-const util = require('util');
-const appendTree = require('append-tree');
-const hypercore = require('hypercore');
-const ram = require('random-access-memory');
-const feed = hypercore((filename) => ram())
-const tree = appendTree(feed, {valueEncoding: 'utf-8'});
-
-const put = util.promisify(tree.put).bind(tree);
-const get = util.promisify(tree.get).bind(tree);
-const list = util.promisify(tree.list).bind(tree);
-
-(async function() {
-    try {
-        await put('/root/branch/leaf1', 'P1');
-        await put('/root/branch/leaf2', 'P2');
-        console.log(await get('/root/branch/leaf1'));
-    } catch (error) {
-        console.error(error);
-    }
-})();
-
- */
+export async function makeTree<Data, Pointer>(store: LogStore<TreeNode<Data, Pointer>, Pointer>, dimensions: number, minimumEntries: number, maximumEntries: number): Promise<Tree<Data, Pointer>> {
+    const rootPointer = await store.append({
+        type: 'root',
+        pointer: await store.append({
+            type: 'leaf',
+            entries: []
+        })
+    });
+    return {
+        root: rootPointer,
+        store,
+        dimensions,
+        minimumEntries,
+        maximumEntries
+    };
+}

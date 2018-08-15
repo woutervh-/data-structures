@@ -2,7 +2,7 @@ import * as React from 'react';
 import { Tree, insert, TreeNode, search, makeTree } from './in-place';
 import './style.css';
 import { Bounds } from './bounds';
-import './append-only';
+// import './append-only';
 
 const colors = [
     '#331a00',
