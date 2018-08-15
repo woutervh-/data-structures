@@ -338,3 +338,17 @@ export async function makeTree<Data, Pointer>(store: LogStore<TreeNode<Data, Poi
         maximumEntries
     };
 }
+
+(async () => {
+    const backingStore: TreeNode<string, number>[] = [];
+    const store: LogStore<TreeNode<string, number>, number> = {
+        async append(data: TreeNode<string, number>) {
+            return backingStore.push(data) - 1;
+        },
+        async get(pointer: number) {
+            return backingStore[pointer];
+        }
+    };
+
+    // TODO: make tree
+})();
