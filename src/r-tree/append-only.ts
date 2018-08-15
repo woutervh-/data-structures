@@ -138,7 +138,7 @@ function pickNext<Data, Pointer>(tree: Tree<Data, Pointer>, left: Bounded, right
 function pickNext<Data, Pointer>(tree: Tree<Data, Pointer>, left: Bounded, right: Bounded, entries: Set<Entry<Data, Pointer>>): Entry<Data, Pointer>;
 function pickNext<Data, Pointer>(tree: Tree<Data, Pointer>, left: Bounded, right: Bounded, entries: Set<Entry<Data, Pointer>>): Entry<Data, Pointer> {
     let maxDifference = Number.NEGATIVE_INFINITY;
-    let selectedNode: Entry<Data, Pointer> | undefined = undefined;
+    let selectedEntry: Entry<Data, Pointer> | undefined = undefined;
     const leftArea = area(left.bounds, tree.dimensions);
     const rightArea = area(right.bounds, tree.dimensions);
     for (const entry of entries) {
@@ -146,13 +146,13 @@ function pickNext<Data, Pointer>(tree: Tree<Data, Pointer>, left: Bounded, right
         const rightAreaDifference = area(combine(right.bounds, entry.bounds, tree.dimensions), tree.dimensions) - rightArea;
         const difference = Math.abs(leftAreaDifference - rightAreaDifference);
         if (difference > maxDifference) {
-            selectedNode = entry;
+            selectedEntry = entry;
         }
     }
-    if (selectedNode === undefined) {
+    if (selectedEntry === undefined) {
         throw new Error('Failed to select node.');
     } else {
-        return selectedNode;
+        return selectedEntry;
     }
 }
 
