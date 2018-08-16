@@ -41,7 +41,7 @@ interface AppState {
 class App extends React.Component<{}, AppState> {
     counter = 0;
 
-    store: LogStore<TreeNode<string, number>, number> = new MemoryLogStore();
+    store: MemoryLogStore = new MemoryLogStore();
 
     state: AppState = {
         tree: null,
@@ -64,7 +64,7 @@ class App extends React.Component<{}, AppState> {
     }, { timeout: -1, one: true });
 
     async componentDidMount() {
-        this.setState({ tree: await makeTree(this.store, 2, 2, 4) });
+        this.setState({ tree: await this.makeTree() });
         this.raf = window.requestAnimationFrame(this.loop);
     }
 
@@ -73,6 +73,8 @@ class App extends React.Component<{}, AppState> {
             window.cancelAnimationFrame(this.raf);
         }
     }
+
+    makeTree = () => makeTree(this.store, 2, 15, 30);
 
     loop = () => {
         if (this.context) {
@@ -85,7 +87,7 @@ class App extends React.Component<{}, AppState> {
         this.raf = window.requestAnimationFrame(this.loop);
     };
 
-    handleLogClick = () => {
+    handlePrintTreeClick = () => {
         function formatSize(bytes: number): string {
             const sizes = ['bytes', 'KiB', 'MiB', 'GiB'];
             const factor = 1024;
@@ -102,6 +104,20 @@ class App extends React.Component<{}, AppState> {
         console.log(JSON.parse(stringified));
     };
 
+    handlePrintLogHistogramClick = () => {
+        const lengths = this.store.backingStore.map((entry) => JSON.stringify(entry).length);
+        const range = 64;
+        const buckets: number[] = [];
+        for (const length of lengths) {
+            const index = Math.floor(length / range);
+            if (buckets[index] === undefined) {
+                buckets[index] = 0;
+            }
+            buckets[index] += 1;
+        }
+        console.log(buckets.map((count, index) => `${count} x ${index * range}-${(index + 1) * range - 1} bytes`));
+    };
+
     handleInsertClick = async () => {
         if (this.state.tree && this.context) {
             const tree = { ...this.state.tree };
@@ -115,7 +131,7 @@ class App extends React.Component<{}, AppState> {
     };
 
     handleClearClick = async () => {
-        this.setState({ tree: await makeTree(this.store, 2, 2, 4) });
+        this.setState({ tree: await this.makeTree() });
     };
 
     drawLegend(context: CanvasRenderingContext2D) {
@@ -150,6 +166,7 @@ class App extends React.Component<{}, AppState> {
     }
 
     async drawNode(context: CanvasRenderingContext2D, tree: Tree<string, number>, pointer: number, depth: number) {
+        const searchResults = await this.searchResults(this.state.tree, this.state.searchBounds);
         context.lineWidth = 2;
         context.setLineDash([]);
         context.font = '24px serif';
@@ -163,14 +180,20 @@ class App extends React.Component<{}, AppState> {
             await this.drawNode(context, tree, node.pointer, depth);
         } else if (node.type === 'leaf') {
             for (const entry of node.entries) {
-                const searchResults = await this.searchResults(this.state.tree, this.state.searchBounds);
-                if (this.state.drawPointsAlways || searchResults.has(entry.data)) {
+                const included = searchResults.has(entry.data);
+                if (this.state.drawPointsAlways || included) {
+                    if (!included && this.state.searchBounds !== null) {
+                        context.globalAlpha = 0.2;
+                    }
                     context.beginPath();
                     context.arc(entry.bounds[0], entry.bounds[2], 4, 0, 2 * Math.PI);
                     context.fill();
                     context.closePath();
                     if (this.state.drawPointLabels) {
                         context.fillText(entry.data, entry.bounds[0], entry.bounds[2]);
+                    }
+                    if (!included && this.state.searchBounds !== null) {
+                        context.globalAlpha = 1;
                     }
                 }
             }
@@ -205,7 +228,14 @@ class App extends React.Component<{}, AppState> {
                 className="canvas-draggable"
                 threshold={5}
                 onDragMove={(event, information) => {
-                    this.setState({ searchBounds: [information.start.x, information.current.x, information.start.y, information.current.y] });
+                    this.setState({
+                        searchBounds: [
+                            Math.min(information.start.x, information.current.x),
+                            Math.max(information.start.x, information.current.x),
+                            Math.min(information.start.y, information.current.y),
+                            Math.max(information.start.y, information.current.y)
+                        ]
+                    });
                 }}
                 onDragEnd={() => {
                     this.setState({ searchBounds: null });
@@ -213,7 +243,15 @@ class App extends React.Component<{}, AppState> {
                 onClick={async (event, information) => {
                     if (this.state.tree) {
                         const tree = { ...this.state.tree };
-                        tree.root = await insert(tree, { bounds: [information.current.x, information.current.x, information.current.y, information.current.y], data: `P${++this.counter}` });
+                        tree.root = await insert(tree, {
+                            bounds: [
+                                information.current.x,
+                                information.current.x,
+                                information.current.y,
+                                information.current.y
+                            ],
+                            data: `P${++this.counter}`
+                        });
                         this.setState({ tree });
                     }
                 }}
@@ -233,7 +271,8 @@ class App extends React.Component<{}, AppState> {
                     <input type="checkbox" checked={this.state.drawPointLabels} onChange={() => this.setState({ drawPointLabels: !this.state.drawPointLabels })} />
                     Draw point labels
                 </label>
-                <button onClick={this.handleLogClick}>Log tree</button>
+                <button onClick={this.handlePrintTreeClick}>Print tree</button>
+                <button onClick={this.handlePrintLogHistogramClick}>Print log histogram</button>
                 <button onClick={this.handleInsertClick}>Insert 1,000 random</button>
                 <button onClick={this.handleClearClick}>Clear</button>
             </div>
