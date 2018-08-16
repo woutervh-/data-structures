@@ -1,4 +1,4 @@
-import { Bounded, Bounds, intersects, area, combine, enclose, overlap } from './bounds';
+import { Bounded, Bounds, intersects, area, combine, enclose, overlap, margin, intersection } from './bounds';
 
 export type LeafHeight = 1;
 
@@ -76,51 +76,63 @@ type LowNode<Data, Pointer> = BranchNode<Pointer> | LeafNode<Data>;
 
 const leafHeight: LeafHeight = 1;
 
-// function chooseSubtree<Data, Pointer>(tree: Tree<Data, Pointer>, node: BranchNode<Pointer>, bounds: Bounds): number {
-//     let minArea = Number.POSITIVE_INFINITY;
-//     let minAreaEnlargement = Number.POSITIVE_INFINITY;
-//     let selectedIndex: number | undefined = undefined;
-//     for (let i = 0; i < node.entries.length; i++) {
-//         const entry = node.entries[i];
-//         const entryArea = area(entry.bounds, tree.dimensions);
-//         const entryAreaEnlargement = area(combine(entry.bounds, bounds, tree.dimensions), tree.dimensions) - entryArea;
-//         if (entryAreaEnlargement < minAreaEnlargement || entryAreaEnlargement === minAreaEnlargement && entryArea < minArea) {
-//             minArea = entryArea;
-//             minAreaEnlargement = entryAreaEnlargement;
-//             selectedIndex = i;
-//         }
-//     }
-//     if (selectedIndex === undefined) {
-//         throw new Error('Could not select entry index.');
-//     }
-//     return selectedIndex;
-// }
+function chooseSubtreeEA<Data, Pointer>(tree: Tree<Data, Pointer>, node: BranchNode<Pointer>, bounds: Bounds): number {
+    let minArea = Number.POSITIVE_INFINITY;
+    let minAreaEnlargement = Number.POSITIVE_INFINITY;
+    let selectedIndex: number | undefined = undefined;
+    for (let i = 0; i < node.entries.length; i++) {
+        const entry = node.entries[i];
+        const entryArea = area(entry.bounds, tree.dimensions);
+        const entryAreaEnlargement = area(combine(entry.bounds, bounds, tree.dimensions), tree.dimensions) - entryArea;
+        if (entryAreaEnlargement < minAreaEnlargement || entryAreaEnlargement === minAreaEnlargement && entryArea < minArea) {
+            minArea = entryArea;
+            minAreaEnlargement = entryAreaEnlargement;
+            selectedIndex = i;
+        }
+    }
+    if (selectedIndex === undefined) {
+        throw new Error('Could not select entry index.');
+    }
+    return selectedIndex;
+}
+
+function chooseSubtreeOEA<Data, Pointer>(tree: Tree<Data, Pointer>, node: BranchNode<Pointer>, bounds: Bounds): number {
+    const allBounds = node.entries.map((entry) => entry.bounds);
+    const allBoundsNew = [...allBounds, bounds];
+    let minArea = Number.POSITIVE_INFINITY;
+    let minAreaEnlargement = Number.POSITIVE_INFINITY;
+    let minOverlapEnlargement = Number.POSITIVE_INFINITY;
+    let selectedIndex: number | undefined = undefined;
+    for (let i = 0; i < node.entries.length; i++) {
+        const entry = node.entries[i];
+        const entryArea = area(entry.bounds, tree.dimensions);
+        const entryAreaEnlargement = area(combine(entry.bounds, bounds, tree.dimensions), tree.dimensions) - entryArea;
+        const entryOverlapEnlargement = overlap(allBoundsNew, entry.bounds, tree.dimensions) - overlap(allBounds, entry.bounds, tree.dimensions);
+        if (
+            entryOverlapEnlargement < minOverlapEnlargement
+            || entryOverlapEnlargement === minOverlapEnlargement &&
+            (
+                entryAreaEnlargement < minAreaEnlargement
+                || entryAreaEnlargement === minAreaEnlargement && entryArea < minArea
+            )
+        ) {
+            minArea = entryArea;
+            minAreaEnlargement = entryAreaEnlargement;
+            minOverlapEnlargement = entryOverlapEnlargement;
+            selectedIndex = i;
+        }
+    }
+    if (selectedIndex === undefined) {
+        throw new Error('Could not select entry index.');
+    }
+    return selectedIndex;
+}
 
 function chooseSubtree<Data, Pointer>(tree: Tree<Data, Pointer>, node: BranchNode<Pointer>, bounds: Bounds): number {
     if (node.height === leafHeight + 1) {
-        const allBounds = node.entries.map((entry) => entry.bounds);
-        const allBoundsNew = [...allBounds, bounds];
-        let minArea = Number.POSITIVE_INFINITY;
-        let minAreaEnlargement = Number.POSITIVE_INFINITY;
-        let minOverlapEnlargement = Number.POSITIVE_INFINITY;
-        let selectedIndex: number | undefined = undefined;
-        for (let i = 0; i < node.entries.length; i++) {
-            const entry = node.entries[i];
-            const entryArea = area(entry.bounds, tree.dimensions);
-            const entryAreaEnlargement = area(combine(entry.bounds, bounds, tree.dimensions), tree.dimensions) - entryArea;
-            const entryOverlapEnlargement = overlap(allBoundsNew, entry.bounds, tree.dimensions) - overlap(allBounds, entry.bounds, tree.dimensions);
-            // TODO: also compare area of rectangle if rest is equal
-            if (entryOverlapEnlargement < minOverlapEnlargement || entryOverlapEnlargement === minOverlapEnlargement && entryAreaEnlargement < minAreaEnlargement) {
-                minArea = entryArea;
-                minAreaEnlargement = entryAreaEnlargement;
-                minOverlapEnlargement = entryOverlapEnlargement;
-                selectedIndex = i;
-            }
-        }
-        if (selectedIndex === undefined) {
-            throw new Error('Could not select entry index.');
-        }
-        return selectedIndex;
+        return chooseSubtreeOEA(tree, node, bounds);
+    } else {
+        return chooseSubtreeEA(tree, node, bounds);
     }
 }
 
@@ -201,6 +213,39 @@ function pickNext<Data, Pointer>(tree: Tree<Data, Pointer>, left: Bounded, right
         throw new Error('Failed to select node.');
     } else {
         return selectedEntry;
+    }
+}
+
+function rStarSplit<Data, Pointer>(tree: Tree<Data, Pointer>, entries: Entry<Data, Pointer>[]): [Entry<Data, Pointer>[], Entry<Data, Pointer>[]] {
+    let minAxisMargin = Number.POSITIVE_INFINITY;
+    let selectedAxis: number | undefined = undefined;
+    for (let i = 0; i < tree.dimensions; i++) {
+        let axisArea: number = 0;
+        let axisMargin: number = 0;
+        let axisOverlap: number = 0;
+        const sortedLower = entries.sort((a, b) => a.bounds[i * 2] - b.bounds[i * 2]);
+        const sortedUpper = entries.sort((a, b) => a.bounds[i * 2 + 1] - b.bounds[i * 2 + 1]);
+        const sortedEntries = [sortedLower, sortedUpper];
+        for (let j = 0; j < 2; j++) {
+            for (let k = 0; k < tree.maximumEntries - 2 * tree.minimumEntries + 2; k++) {
+                const left = sortedEntries[j].slice();
+                const right = left.splice(tree.minimumEntries - 1 + k);
+                const boundsLeft = enclose(left.map((entry) => entry.bounds), tree.dimensions);
+                const boundsRight = enclose(right.map((entry) => entry.bounds), tree.dimensions);
+                const areaLeft = area(boundsLeft, tree.dimensions);
+                const areaRight = area(boundsRight, tree.dimensions);
+                const marginLeft = margin(boundsLeft, tree.dimensions);
+                const marginRight = margin(boundsRight, tree.dimensions);
+                const distributionOverlap = area(intersection(boundsLeft, boundsRight, tree.dimensions), tree.dimensions);
+                axisArea += areaLeft + areaRight;
+                axisMargin += marginLeft + marginRight;
+                axisOverlap += distributionOverlap;
+            }
+        }
+        if (axisMargin < minAxisMargin) {
+            minAxisMargin = axisMargin;
+            selectedAxis = i;
+        }
     }
 }
 

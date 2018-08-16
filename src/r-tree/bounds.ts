@@ -41,6 +41,14 @@ export function area(bounds: Bounds, dimensions: number): number {
     return area;
 }
 
+export function margin(bounds: Bounds, dimensions: number): number {
+    let margin = 0;
+    for (let i = 0; i < dimensions; i++) {
+        margin += bounds[i * 2 + 1] - bounds[i * 2];
+    }
+    return (2 ** (dimensions - 1)) * margin;
+}
+
 export function combine(a: Bounds, b: Bounds, dimensions: number): Bounds {
     const bounds: Bounds = [];
     for (let i = 0; i < dimensions; i++) {
