@@ -1,4 +1,6 @@
-import { Bounded, Bounds, intersects, area, combine, enclose } from './bounds';
+import { Bounded, Bounds, intersects, area, combine, enclose, overlap } from './bounds';
+
+export type LeafHeight = 1;
 
 export interface LeafEntry<Data> extends Bounded {
     data: Data;
@@ -6,6 +8,7 @@ export interface LeafEntry<Data> extends Bounded {
 
 export interface LeafNode<Data> {
     type: 'leaf';
+    height: LeafHeight;
     entries: LeafEntry<Data>[];
 }
 
@@ -15,11 +18,13 @@ export interface BranchEntry<Pointer> extends Bounded {
 
 export interface BranchNode<Pointer> {
     type: 'branch';
+    height: number;
     entries: BranchEntry<Pointer>[];
 }
 
 export interface RootNode<Pointer> {
     type: 'root';
+    height: number;
     pointer: Pointer;
 }
 
@@ -69,24 +74,54 @@ interface Split<Data, Pointer> {
 
 type LowNode<Data, Pointer> = BranchNode<Pointer> | LeafNode<Data>;
 
+const leafHeight: LeafHeight = 1;
+
+// function chooseSubtree<Data, Pointer>(tree: Tree<Data, Pointer>, node: BranchNode<Pointer>, bounds: Bounds): number {
+//     let minArea = Number.POSITIVE_INFINITY;
+//     let minAreaEnlargement = Number.POSITIVE_INFINITY;
+//     let selectedIndex: number | undefined = undefined;
+//     for (let i = 0; i < node.entries.length; i++) {
+//         const entry = node.entries[i];
+//         const entryArea = area(entry.bounds, tree.dimensions);
+//         const entryAreaEnlargement = area(combine(entry.bounds, bounds, tree.dimensions), tree.dimensions) - entryArea;
+//         if (entryAreaEnlargement < minAreaEnlargement || entryAreaEnlargement === minAreaEnlargement && entryArea < minArea) {
+//             minArea = entryArea;
+//             minAreaEnlargement = entryAreaEnlargement;
+//             selectedIndex = i;
+//         }
+//     }
+//     if (selectedIndex === undefined) {
+//         throw new Error('Could not select entry index.');
+//     }
+//     return selectedIndex;
+// }
+
 function chooseSubtree<Data, Pointer>(tree: Tree<Data, Pointer>, node: BranchNode<Pointer>, bounds: Bounds): number {
-    let minArea = Number.POSITIVE_INFINITY;
-    let minEnlargement = Number.POSITIVE_INFINITY;
-    let selectedIndex: number | undefined = undefined;
-    for (let i = 0; i < node.entries.length; i++) {
-        const entry = node.entries[i];
-        const entryArea = area(entry.bounds, tree.dimensions);
-        const entryEnlargement = area(combine(entry.bounds, bounds, tree.dimensions), tree.dimensions);
-        if (entryEnlargement < minEnlargement || entryEnlargement === minEnlargement && entryArea < minArea) {
-            minArea = entryArea;
-            minEnlargement = entryEnlargement;
-            selectedIndex = i;
+    if (node.height === leafHeight + 1) {
+        const allBounds = node.entries.map((entry) => entry.bounds);
+        const allBoundsNew = [...allBounds, bounds];
+        let minArea = Number.POSITIVE_INFINITY;
+        let minAreaEnlargement = Number.POSITIVE_INFINITY;
+        let minOverlapEnlargement = Number.POSITIVE_INFINITY;
+        let selectedIndex: number | undefined = undefined;
+        for (let i = 0; i < node.entries.length; i++) {
+            const entry = node.entries[i];
+            const entryArea = area(entry.bounds, tree.dimensions);
+            const entryAreaEnlargement = area(combine(entry.bounds, bounds, tree.dimensions), tree.dimensions) - entryArea;
+            const entryOverlapEnlargement = overlap(allBoundsNew, entry.bounds, tree.dimensions) - overlap(allBounds, entry.bounds, tree.dimensions);
+            // TODO: also compare area of rectangle if rest is equal
+            if (entryOverlapEnlargement < minOverlapEnlargement || entryOverlapEnlargement === minOverlapEnlargement && entryAreaEnlargement < minAreaEnlargement) {
+                minArea = entryArea;
+                minAreaEnlargement = entryAreaEnlargement;
+                minOverlapEnlargement = entryOverlapEnlargement;
+                selectedIndex = i;
+            }
         }
+        if (selectedIndex === undefined) {
+            throw new Error('Could not select entry index.');
+        }
+        return selectedIndex;
     }
-    if (selectedIndex === undefined) {
-        throw new Error('Could not select entry index.');
-    }
-    return selectedIndex;
 }
 
 async function chooseLeaf<Data, Pointer>(tree: Tree<Data, Pointer>, bounds: Bounds): Promise<Path<Data, Pointer>> {
@@ -242,6 +277,7 @@ async function adjustTree<Data, Pointer>(tree: Tree<Data, Pointer>, path: Path<D
         if (parentEntries.length <= tree.maximumEntries) {
             n1 = {
                 type: 'branch',
+                height: n1.height + 1,
                 entries: parentEntries
             };
             n2 = undefined;
@@ -249,10 +285,12 @@ async function adjustTree<Data, Pointer>(tree: Tree<Data, Pointer>, path: Path<D
             const [p, pp] = quadraticSplit(tree, parentEntries);
             n1 = {
                 type: 'branch',
+                height: n1.height + 1,
                 entries: p
             };
             n2 = {
                 type: 'branch',
+                height: n1.height + 1,
                 entries: pp
             };
         }
@@ -268,6 +306,7 @@ export async function insert<Data, Pointer>(tree: Tree<Data, Pointer>, entry: Le
     if (path.leaf.node.entries.length < tree.maximumEntries) {
         n1 = {
             type: 'leaf',
+            height: leafHeight,
             entries
         };
         n2 = undefined;
@@ -275,10 +314,12 @@ export async function insert<Data, Pointer>(tree: Tree<Data, Pointer>, entry: Le
         const split = quadraticSplit(tree, entries);
         n1 = {
             type: 'leaf',
+            height: leafHeight,
             entries: split[0]
         };
         n2 = {
             type: 'leaf',
+            height: leafHeight,
             entries: split[1]
         };
     }
@@ -289,6 +330,7 @@ export async function insert<Data, Pointer>(tree: Tree<Data, Pointer>, entry: Le
         const r2Entries: Bounded[] = r2.entries;
         rootBranch = {
             type: 'branch',
+            height: r1.height + 1,
             entries: [{
                 bounds: enclose(r1Entries.map((entry) => entry.bounds), tree.dimensions),
                 pointer: await tree.store.append(r1)
@@ -302,6 +344,7 @@ export async function insert<Data, Pointer>(tree: Tree<Data, Pointer>, entry: Le
     }
     return await tree.store.append({
         type: 'root',
+        height: r1.height,
         pointer: await tree.store.append(rootBranch)
     });
 }
@@ -334,8 +377,10 @@ export async function search<Data, Pointer>(tree: Tree<Data, Pointer>, searchBou
 export async function makeTree<Data, Pointer>(store: LogStore<TreeNode<Data, Pointer>, Pointer>, dimensions: number, minimumEntries: number, maximumEntries: number): Promise<Tree<Data, Pointer>> {
     const rootPointer = await store.append({
         type: 'root',
+        height: leafHeight + 1,
         pointer: await store.append({
             type: 'leaf',
+            height: leafHeight,
             entries: []
         })
     });

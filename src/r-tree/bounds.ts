@@ -14,6 +14,25 @@ export function intersects(a: Bounds, b: Bounds, dimensions: number): boolean {
     return true;
 }
 
+export function intersection(a: Bounds, b: Bounds, dimensions: number): Bounds {
+    const intersection: Bounds = [];
+    for (let i = 0; i < dimensions; i++) {
+        intersection[i * 2] = Math.max(a[i * 2], b[i * 2]);
+        intersection[i * 2 + 1] = Math.min(a[i * 2 + 1], b[i * 2 + 1]);
+    }
+    return intersection;
+}
+
+export function overlap(boundsList: Bounds[], withBounds: Bounds, dimensions: number): number {
+    let sum = 0;
+    for (const bounds of boundsList) {
+        if (bounds !== withBounds) {
+            sum += area(intersection(bounds, withBounds, dimensions), dimensions);
+        }
+    }
+    return sum;
+}
+
 export function area(bounds: Bounds, dimensions: number): number {
     let area = 1;
     for (let i = 0; i < dimensions; i++) {
