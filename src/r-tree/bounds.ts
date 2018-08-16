@@ -4,8 +4,8 @@ export interface Bounded {
     bounds: Bounds;
 }
 
-export function overlaps(a: Bounds, b: Bounds, dimensions: number): boolean {
-    // Checks if bounds overlap (inclusively borders)
+export function intersects(a: Bounds, b: Bounds, dimensions: number): boolean {
+    // Checks if bounds intersect (inclusively borders)
     for (let i = 0; i < dimensions; i++) {
         if (a[i * 2] > b[i * 2 + 1] || a[i * 2 + 1] < b[i * 2]) {
             return false;

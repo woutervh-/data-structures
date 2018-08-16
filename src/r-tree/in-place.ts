@@ -1,4 +1,4 @@
-import { Bounded, Bounds, area, combine, enclose, overlaps } from './bounds';
+import { Bounded, Bounds, area, combine, enclose, intersects } from './bounds';
 
 export interface LeafEntry<Data> extends Bounded {
     data: Data;
@@ -244,11 +244,11 @@ export function insert<Data>(tree: Tree<Data>, entry: LeafEntry<Data>) {
 export function search<Data>(tree: Tree<Data>, node: TreeNode<Data>, bounds: Bounds): Data[] {
     if (node.type === 'leaf') {
         return node.entries
-            .filter((entry) => overlaps(bounds, entry.bounds, tree.dimensions))
+            .filter((entry) => intersects(bounds, entry.bounds, tree.dimensions))
             .map((entry) => entry.data);
     } else {
         return node.entries
-            .filter((entry) => overlaps(bounds, entry.bounds, tree.dimensions))
+            .filter((entry) => intersects(bounds, entry.bounds, tree.dimensions))
             .map((entry) => search(tree, entry.child, bounds))
             .reduce((accumulator, data) => accumulator.concat(data), []);
     }

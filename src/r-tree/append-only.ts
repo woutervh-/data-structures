@@ -1,4 +1,4 @@
-import { Bounded, Bounds, overlaps, area, combine, enclose } from './bounds';
+import { Bounded, Bounds, intersects, area, combine, enclose } from './bounds';
 
 export interface LeafEntry<Data> extends Bounded {
     data: Data;
@@ -69,6 +69,26 @@ interface Split<Data, Pointer> {
 
 type LowNode<Data, Pointer> = BranchNode<Pointer> | LeafNode<Data>;
 
+function chooseSubtree<Data, Pointer>(tree: Tree<Data, Pointer>, node: BranchNode<Pointer>, bounds: Bounds): number {
+    let minArea = Number.POSITIVE_INFINITY;
+    let minEnlargement = Number.POSITIVE_INFINITY;
+    let selectedIndex: number | undefined = undefined;
+    for (let i = 0; i < node.entries.length; i++) {
+        const entry = node.entries[i];
+        const entryArea = area(entry.bounds, tree.dimensions);
+        const entryEnlargement = area(combine(entry.bounds, bounds, tree.dimensions), tree.dimensions);
+        if (entryEnlargement < minEnlargement || entryEnlargement === minEnlargement && entryArea < minArea) {
+            minArea = entryArea;
+            minEnlargement = entryEnlargement;
+            selectedIndex = i;
+        }
+    }
+    if (selectedIndex === undefined) {
+        throw new Error('Could not select entry index.');
+    }
+    return selectedIndex;
+}
+
 async function chooseLeaf<Data, Pointer>(tree: Tree<Data, Pointer>, bounds: Bounds): Promise<Path<Data, Pointer>> {
     const root = await tree.store.get(tree.root);
     if (root.type !== 'root') {
@@ -83,20 +103,7 @@ async function chooseLeaf<Data, Pointer>(tree: Tree<Data, Pointer>, bounds: Boun
             pointer = node.pointer;
             node = await tree.store.get(pointer);
         } else {
-            // Choose subtree
-            let minArea = Number.POSITIVE_INFINITY;
-            let minEnlargement = Number.POSITIVE_INFINITY;
-            let selectedIndex: number | undefined = undefined;
-            for (let i = 0; i < node.entries.length; i++) {
-                const entry = node.entries[i];
-                const entryArea = area(entry.bounds, tree.dimensions);
-                const entryEnlargement = area(combine(entry.bounds, bounds, tree.dimensions), tree.dimensions);
-                if (entryEnlargement < minEnlargement || entryEnlargement === minEnlargement && entryArea < minArea) {
-                    minArea = entryArea;
-                    minEnlargement = entryEnlargement;
-                    selectedIndex = i;
-                }
-            }
+            const selectedIndex = chooseSubtree(tree, node, bounds);
             if (selectedIndex === undefined) {
                 throw new Error('Could not select entry index.');
             }
@@ -310,13 +317,13 @@ export async function search<Data, Pointer>(tree: Tree<Data, Pointer>, searchBou
         } else if (node.type === 'branch') {
             stack.push(
                 ...node.entries
-                    .filter((entry) => overlaps(entry.bounds, searchBounds, tree.dimensions))
+                    .filter((entry) => intersects(entry.bounds, searchBounds, tree.dimensions))
                     .map((entry) => entry.pointer)
             );
         } else {
             result.push(
                 ...node.entries
-                    .filter((entry) => overlaps(entry.bounds, searchBounds, tree.dimensions))
+                    .filter((entry) => intersects(entry.bounds, searchBounds, tree.dimensions))
                     .map((entry) => entry.data)
             );
         }
