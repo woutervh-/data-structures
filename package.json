@@ -5,7 +5,9 @@
   "main": "none",
   "dependencies": {
     "react": "^16.4.2",
-    "react-dom": "^16.4.2"
+    "react-dom": "^16.4.2",
+    "react-managed-draggable": "^0.1.8",
+    "timed-memoize": "^2.4.2"
   },
   "devDependencies": {
     "@types/node": "^8.9.3",

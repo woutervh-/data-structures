@@ -217,7 +217,7 @@ function quadraticSplit<Data, Pointer>(tree: Tree<Data, Pointer>, entries: Entry
 }
 
 async function adjustTree<Data, Pointer>(tree: Tree<Data, Pointer>, path: Path<Data, Pointer>, n1: LowNode<Data, Pointer>, n2: LowNode<Data, Pointer> | undefined): Promise<[LowNode<Data, Pointer>, LowNode<Data, Pointer> | undefined]> {
-    let parent: LinkBranch<Pointer> | undefined;
+    let parent: LinkBranch<Pointer> | undefined = undefined;
     while ((parent = path.branches.pop()) !== undefined) {
         const parentEntries = [...parent.node.entries];
         const n1Entries: Bounded[] = n1.entries;
@@ -233,7 +233,10 @@ async function adjustTree<Data, Pointer>(tree: Tree<Data, Pointer>, path: Path<D
             });
         }
         if (parentEntries.length <= tree.maximumEntries) {
-            n1 = parent.node;
+            n1 = {
+                type: 'branch',
+                entries: parentEntries
+            };
             n2 = undefined;
         } else {
             const [p, pp] = quadraticSplit(tree, parentEntries);
@@ -250,7 +253,7 @@ async function adjustTree<Data, Pointer>(tree: Tree<Data, Pointer>, path: Path<D
     return [n1, n2];
 }
 
-export async function insert<Data, Pointer>(tree: Tree<Data, Pointer>, entry: LeafEntry<Data>) {
+export async function insert<Data, Pointer>(tree: Tree<Data, Pointer>, entry: LeafEntry<Data>): Promise<Pointer> {
     const path = await chooseLeaf(tree, entry.bounds);
     const entries = [...path.leaf.node.entries, entry];
     let n1: LeafNode<Data>;
@@ -290,11 +293,10 @@ export async function insert<Data, Pointer>(tree: Tree<Data, Pointer>, entry: Le
     } else {
         rootBranch = r1;
     }
-    const rootPointer = await tree.store.append({
+    return await tree.store.append({
         type: 'root',
         pointer: await tree.store.append(rootBranch)
     });
-    return { ...tree, root: rootPointer };
 }
 
 export async function search<Data, Pointer>(tree: Tree<Data, Pointer>, searchBounds: Bounds): Promise<Data[]> {
@@ -339,16 +341,22 @@ export async function makeTree<Data, Pointer>(store: LogStore<TreeNode<Data, Poi
     };
 }
 
-(async () => {
-    const backingStore: TreeNode<string, number>[] = [];
-    const store: LogStore<TreeNode<string, number>, number> = {
-        async append(data: TreeNode<string, number>) {
-            return backingStore.push(data) - 1;
-        },
-        async get(pointer: number) {
-            return backingStore[pointer];
-        }
-    };
+// (async () => {
+//     const backingStore: TreeNode<string, number>[] = [];
+//     const store: LogStore<TreeNode<string, number>, number> = {
+//         async append(data: TreeNode<string, number>) {
+//             return backingStore.push(data) - 1;
+//         },
+//         async get(pointer: number) {
+//             return backingStore[pointer];
+//         }
+//     };
 
-    // TODO: make tree
-})();
+//     let tree = await makeTree(store, 2, 2, 4);
+//     tree = await insert(tree, { bounds: [0, 0, 1, 1], data: 'P1' });
+//     tree = await insert(tree, { bounds: [1, 1, 2, 2], data: 'P2' });
+//     tree = await insert(tree, { bounds: [2, 2, 3, 3], data: 'P3' });
+//     tree = await insert(tree, { bounds: [3, 3, 4, 4], data: 'P4' });
+//     tree = await insert(tree, { bounds: [4, 4, 5, 5], data: 'P5' });
+//     debugger;
+// })();
