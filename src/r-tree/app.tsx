@@ -57,7 +57,7 @@ class App extends React.Component<{}, AppState> {
 
     searchResults = timedMemoize(async (tree: Tree<string, number> | null, searchBounds: Bounds | null) => {
         if (searchBounds !== null && tree !== null) {
-            return new Set(await search(tree, searchBounds));
+            return new Set(await search(tree, tree.root, searchBounds));
         } else {
             return new Set([]);
         }
