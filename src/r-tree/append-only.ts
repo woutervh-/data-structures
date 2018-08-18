@@ -1,4 +1,4 @@
-import { Bounded, Bounds, intersects, area, combine, enclose, overlap, margin, intersection } from './bounds';
+import { Bounded, Bounds, area, combine, enclose, overlap, margin, intersection, intersects } from './bounds';
 
 export type LeafHeight = 1;
 
@@ -82,6 +82,7 @@ type LowNode<Data, Pointer> = BranchNode<Pointer> | LeafNode<Data>;
 const leafHeight: LeafHeight = 1;
 
 function chooseSubtreeEA<Data, Pointer>(tree: Tree<Data, Pointer>, node: BranchNode<Pointer>, bounds: Bounds): number {
+    // Check enlargement and area.
     let minArea = Number.POSITIVE_INFINITY;
     let minAreaEnlargement = Number.POSITIVE_INFINITY;
     let selectedIndex: number | undefined = undefined;
@@ -102,6 +103,7 @@ function chooseSubtreeEA<Data, Pointer>(tree: Tree<Data, Pointer>, node: BranchN
 }
 
 function chooseSubtreeOEA<Data, Pointer>(tree: Tree<Data, Pointer>, node: BranchNode<Pointer>, bounds: Bounds): number {
+    // Check overlap, enlargement, and area.
     const allBounds = node.entries.map((entry) => entry.bounds);
     const allBoundsNew = [...allBounds, bounds];
     let minArea = Number.POSITIVE_INFINITY;
@@ -338,23 +340,65 @@ function quadraticSplit<Data, Pointer>(tree: Tree<Data, Pointer>, entries: Entry
     return [left.entries, right.entries];
 }
 
+export async function stealFromSibling<Data, Pointer>(tree: Tree<Data, Pointer>, bounds: Bounds, parent: BranchNode<Pointer>): Promise<Entry<Data, Pointer>> {
+    let maxArea = Number.NEGATIVE_INFINITY;
+    let minAreaEnlargement = Number.POSITIVE_INFINITY;
+    let selectedSibling: BranchEntry<Pointer> | undefined = undefined;
+    const entryCountMin = tree.minimumEntries ** (parent.height - 1 - leafHeight + 1);
+    for (const entry of parent.entries) {
+        if (entry.count > entryCountMin) {
+            const entryArea = area(entry.bounds, tree.dimensions);
+            const entryAreaEnlargement = area(combine(entry.bounds, bounds, tree.dimensions), tree.dimensions) - area(bounds, tree.dimensions);
+            if (entryAreaEnlargement < minAreaEnlargement || entryAreaEnlargement === minAreaEnlargement && entryArea > maxArea) {
+                maxArea = entryArea;
+                minAreaEnlargement = entryAreaEnlargement;
+                selectedSibling = entry;
+            }
+        }
+    }
+    if (selectedSibling === undefined) {
+        throw new Error('Could not select sibling to steal from.');
+    }
+    const sibling = await tree.store.get(selectedSibling.pointer);
+    if (sibling.type === 'root') {
+        throw new Error('Sibling is not expected to be root.');
+    }
+    for (const entry of sibling.entries) {
+    }
+    return selectedSibling;
+}
+
 export async function condenseTree<Data, Pointer>(tree: Tree<Data, Pointer>, path: EntryPath<Data, Pointer>, n1: LowNode<Data, Pointer>): Promise<LowNode<Data, Pointer>> {
     let parent: LinkBranch<Pointer> | undefined = undefined;
     while ((parent = path.branches.pop()) !== undefined) {
         const parentEntries = [...parent.node.entries];
         const n1Entries: Bounded[] = n1.entries;
-        if (n1.entries.length < tree.minimumEntries) {
+        if (n1.entries.length === tree.minimumEntries - 1) {
             // This node has too few entries after deletion.
             // Check if parent has enough entries underneath it.
             const parentCount = parent.node.entries.reduce((total, entry) => entry.count + total, 0);
             const parentCountMin = tree.minimumEntries ** (parent.node.height - leafHeight + 1);
             if (parentCount - 1 < parentCountMin) {
-                // Parent node is now too empty, it needs to be condensed.
+                // Parent node is now too empty, it too needs to be purged.
+                // TODO: implement
             } else {
                 // Parent still has enough nodes underneath it.
                 // We will steal a node from one of the siblings.
+                const n1Bounds = enclose(n1Entries.map((entry) => entry.bounds), tree.dimensions);
+                const entry = await stealFromSibling(tree, n1Bounds, parent.node);
+                n1.entries.push(entry);
+                parentEntries[parent.index] = {
+                    bounds: enclose(n1Entries.map((entry) => entry.bounds), tree.dimensions),
+                    pointer: await tree.store.append(n1),
+                    count: n1.type === 'leaf' ? n1.entries.length : n1.entries.reduce((total, entry) => entry.count + total, 0)
+                };
+                n1 = {
+                    type: 'branch',
+                    entries: parentEntries,
+                    height: parent.node.height
+                };
             }
-        } else {
+        } else if (n1.entries.length >= tree.minimumEntries) {
             // This node still has enough entries.
             parentEntries[parent.index] = {
                 bounds: enclose(n1Entries.map((entry) => entry.bounds), tree.dimensions),
@@ -366,6 +410,8 @@ export async function condenseTree<Data, Pointer>(tree: Tree<Data, Pointer>, pat
                 entries: parentEntries,
                 height: parent.node.height
             };
+        } else {
+            throw new Error('More than one entry was removed.');
         }
     }
     return n1;

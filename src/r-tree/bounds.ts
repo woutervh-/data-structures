@@ -4,8 +4,18 @@ export interface Bounded {
     bounds: Bounds;
 }
 
+export function contains(a: Bounds, b: Bounds, dimensions: number): boolean {
+    // Check if b is contained by a (borders inclusively)
+    for (let i = 0; i < dimensions; i++) {
+        if (a[i * 2] < b[i * 2] || a[i * 2 + 1] > b[i * 2 + 1]) {
+            return false;
+        }
+    }
+    return true;
+}
+
 export function intersects(a: Bounds, b: Bounds, dimensions: number): boolean {
-    // Checks if bounds intersect (inclusively borders)
+    // Checks if boxes intersect (borders inclusively)
     for (let i = 0; i < dimensions; i++) {
         if (a[i * 2] > b[i * 2 + 1] || a[i * 2 + 1] < b[i * 2]) {
             return false;
