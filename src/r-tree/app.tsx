@@ -2,7 +2,7 @@ import * as React from 'react';
 import * as ReactDOM from 'react-dom';
 import { Draggable } from 'react-managed-draggable';
 import timedMemoize from 'timed-memoize';
-import { makeTree, LogStore, TreeNode, Tree, insert, search } from './append-only';
+import { makeTree, LogStore, TreeNode, Tree, insert, search, remove } from './append-only';
 import { Bounds } from './bounds';
 import './style.css';
 
@@ -74,7 +74,8 @@ class App extends React.Component<{}, AppState> {
         }
     }
 
-    makeTree = () => makeTree(this.store, 2, 15, 30);
+    // makeTree = () => makeTree(this.store, 2, 15, 30);
+    makeTree = () => makeTree(this.store, 2, 2, 4);
 
     loop = () => {
         if (this.context) {
@@ -85,6 +86,22 @@ class App extends React.Component<{}, AppState> {
             this.draw(this.context);
         }
         this.raf = window.requestAnimationFrame(this.loop);
+    };
+
+    handleDragKeyUp = async (event: KeyboardEvent) => {
+        if (this.state.tree && this.state.searchBounds) {
+            if (event.which === 46) {
+                const tree = { ...this.state.tree };
+                const results = await this.searchResults(tree, this.state.searchBounds);
+                for (const entry of results) {
+                    const root = await remove(tree, { bounds: this.state.searchBounds, data: entry });
+                    if (root) {
+                        tree.root = root;
+                    }
+                }
+                this.setState({ tree });
+            }
+        }
     };
 
     handlePrintTreeClick = () => {
@@ -227,6 +244,9 @@ class App extends React.Component<{}, AppState> {
             <Draggable
                 className="canvas-draggable"
                 threshold={5}
+                onDragStart={() => {
+                    document.addEventListener('keyup', this.handleDragKeyUp);
+                }}
                 onDragMove={(event, information) => {
                     this.setState({
                         searchBounds: [
@@ -238,6 +258,7 @@ class App extends React.Component<{}, AppState> {
                     });
                 }}
                 onDragEnd={() => {
+                    document.removeEventListener('keyup', this.handleDragKeyUp);
                     this.setState({ searchBounds: null });
                 }}
                 onClick={async (event, information) => {
