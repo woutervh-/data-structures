@@ -346,11 +346,12 @@ function quadraticSplit<Data, Pointer>(tree: Tree<Data, Pointer>, entries: Entry
     return [left.entries, right.entries];
 }
 
-export async function stealFromSibling<Data, Pointer>(tree: Tree<Data, Pointer>, bounds: Bounds, parentEntry: LinkBranch<Pointer>): Promise<[LinkBranch<Pointer>, LinkLowNode<Data, Pointer>]> {
+export async function chooseNibling<Data, Pointer>(tree: Tree<Data, Pointer>, bounds: Bounds, parentEntry: LinkBranch<Pointer>): Promise<[LinkBranch<Pointer>, LinkLowNode<Data, Pointer>]> {
+    // TODO: may want to consider only comparing niblings of a single sibling, to avoid async page accesses. Will need some heuristic to choose best sibling.
     let maxArea = Number.NEGATIVE_INFINITY;
     let minAreaEnlargement = Number.POSITIVE_INFINITY;
     let linkSibling: LinkBranch<Pointer> | undefined = undefined;
-    let linkCousin: LinkLowNode<Data, Pointer> | undefined = undefined;
+    let linkNibling: LinkLowNode<Data, Pointer> | undefined = undefined;
     const entryCountMin = tree.minimumEntries ** (parentEntry.node.height - 1 - leafHeight + 1);
     for (let i = 0; i < parentEntry.node.entries.length; i++) {
         const siblingEntry = parentEntry.node.entries[i];
@@ -360,18 +361,18 @@ export async function stealFromSibling<Data, Pointer>(tree: Tree<Data, Pointer>,
                 throw new Error('Sibling is not expected to be root.');
             }
             for (let j = 0; j < sibling.entries.length; j++) {
-                const cousinEntry = sibling.entries[j];
-                const cousinEntryArea = area(cousinEntry.bounds, tree.dimensions);
-                const cousinEntryAreaEnlargement = area(combine(cousinEntry.bounds, bounds, tree.dimensions), tree.dimensions) - area(bounds, tree.dimensions);
-                if (cousinEntryAreaEnlargement < minAreaEnlargement || cousinEntryAreaEnlargement === minAreaEnlargement && cousinEntryArea > maxArea) {
-                    maxArea = cousinEntryArea;
-                    minAreaEnlargement = cousinEntryAreaEnlargement;
+                const niblingEntry = sibling.entries[j];
+                const niblingEntryArea = area(niblingEntry.bounds, tree.dimensions);
+                const niblingEntryAreaEnlargement = area(combine(niblingEntry.bounds, bounds, tree.dimensions), tree.dimensions) - area(bounds, tree.dimensions);
+                if (niblingEntryAreaEnlargement < minAreaEnlargement || niblingEntryAreaEnlargement === minAreaEnlargement && niblingEntryArea > maxArea) {
+                    maxArea = niblingEntryArea;
+                    minAreaEnlargement = niblingEntryAreaEnlargement;
                     linkSibling = {
                         index: i,
                         node: parentEntry.node,
                         pointer: parentEntry.pointer
                     };
-                    linkCousin = {
+                    linkNibling = {
                         index: j,
                         node: sibling,
                         pointer: siblingEntry.pointer
@@ -380,14 +381,15 @@ export async function stealFromSibling<Data, Pointer>(tree: Tree<Data, Pointer>,
             }
         }
     }
-    if (linkSibling === undefined || linkCousin === undefined) {
+    if (linkSibling === undefined || linkNibling === undefined) {
         throw new Error('Could not select sibling to steal from.');
     } else {
-        return [linkSibling, linkCousin];
+        return [linkSibling, linkNibling];
     }
 }
 
 export async function condenseTree<Data, Pointer>(tree: Tree<Data, Pointer>, path: EntryPath<Data, Pointer>, n1: LowNode<Data, Pointer>): Promise<LowNode<Data, Pointer>> {
+    // TODO: case that root = n1
     let parent: LinkBranch<Pointer> | undefined = undefined;
     while ((parent = path.branches.pop()) !== undefined) {
         const parentEntries = [...parent.node.entries];
@@ -404,11 +406,11 @@ export async function condenseTree<Data, Pointer>(tree: Tree<Data, Pointer>, pat
                 // Parent still has enough nodes underneath it.
                 // We will steal a node from one of the siblings.
                 const n1Bounds = enclose(n1Entries.map((entry) => entry.bounds), tree.dimensions);
-                const [sibling, cousin] = await stealFromSibling(tree, n1Bounds, parent);
-                n1Entries.push(cousin.node.entries[cousin.index]);
-                const n2Entries: Bounded[] = cousin.node.entries.slice();
-                n2Entries.splice(cousin.index, 1);
-                const n2: LowNode<Data, Pointer> = Object.assign({}, cousin.node, { entries: n2Entries });
+                const [sibling, nibling] = await chooseNibling(tree, n1Bounds, parent);
+                n1Entries.push(nibling.node.entries[nibling.index]);
+                const n2Entries: Bounded[] = nibling.node.entries.slice();
+                n2Entries.splice(nibling.index, 1);
+                const n2: LowNode<Data, Pointer> = Object.assign({}, nibling.node, { entries: n2Entries });
                 parentEntries[parent.index] = {
                     bounds: enclose(n1Entries.map((entry) => entry.bounds), tree.dimensions),
                     pointer: await tree.store.append(n1),
