@@ -346,15 +346,24 @@ function quadraticSplit<Data, Pointer>(tree: Tree<Data, Pointer>, entries: Entry
     return [left.entries, right.entries];
 }
 
-export async function chooseNibling<Data, Pointer>(tree: Tree<Data, Pointer>, bounds: Bounds, parentEntry: LinkBranch<Pointer>): Promise<[LinkBranch<Pointer>, LinkLowNode<Data, Pointer>]> {
+export async function chooseSibling<Data, Pointer>(tree: Tree<Data, Pointer>, bounds: Bounds, parentLink: LinkBranch<Pointer>) {
+    let minArea = Number.POSITIVE_INFINITY;
+    let minAreaEnlargement = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < parentLink.node.entries.length; i++) {
+        const siblingEntry = parentLink.node.entries[i];
+
+    }
+}
+
+export async function chooseNibling<Data, Pointer>(tree: Tree<Data, Pointer>, bounds: Bounds, parentLink: LinkBranch<Pointer>): Promise<[LinkBranch<Pointer>, LinkLowNode<Data, Pointer>]> {
     // TODO: may want to consider only comparing niblings of a single sibling, to avoid async page accesses. Will need some heuristic to choose best sibling.
     let maxArea = Number.NEGATIVE_INFINITY;
     let minAreaEnlargement = Number.POSITIVE_INFINITY;
     let linkSibling: LinkBranch<Pointer> | undefined = undefined;
     let linkNibling: LinkLowNode<Data, Pointer> | undefined = undefined;
-    const entryCountMin = tree.minimumEntries ** (parentEntry.node.height - 1 - leafHeight + 1);
-    for (let i = 0; i < parentEntry.node.entries.length; i++) {
-        const siblingEntry = parentEntry.node.entries[i];
+    const entryCountMin = tree.minimumEntries ** (parentLink.node.height - 1 - leafHeight + 1);
+    for (let i = 0; i < parentLink.node.entries.length; i++) {
+        const siblingEntry = parentLink.node.entries[i];
         if (siblingEntry.count > entryCountMin) {
             const sibling = await tree.store.get(siblingEntry.pointer);
             if (sibling.type === 'root') {
@@ -369,8 +378,8 @@ export async function chooseNibling<Data, Pointer>(tree: Tree<Data, Pointer>, bo
                     minAreaEnlargement = niblingEntryAreaEnlargement;
                     linkSibling = {
                         index: i,
-                        node: parentEntry.node,
-                        pointer: parentEntry.pointer
+                        node: parentLink.node,
+                        pointer: parentLink.pointer
                     };
                     linkNibling = {
                         index: j,
@@ -401,10 +410,13 @@ export async function condenseTree<Data, Pointer>(tree: Tree<Data, Pointer>, pat
             const parentCountMin = tree.minimumEntries ** (parent.node.height - leafHeight + 1);
             if (parentCount - 1 < parentCountMin) {
                 // Parent node is now too empty, it too needs to be purged.
+                // We will donate a node to one of the siblings, and get rid of the current one.
                 // TODO: implement
+
             } else {
                 // Parent still has enough nodes underneath it.
                 // We will steal a node from one of the siblings.
+                // TODO: problem: parent may still have enough total entries, but each sibling may not have enough entries to share one.
                 const n1Bounds = enclose(n1Entries.map((entry) => entry.bounds), tree.dimensions);
                 const [sibling, nibling] = await chooseNibling(tree, n1Bounds, parent);
                 n1Entries.push(nibling.node.entries[nibling.index]);
