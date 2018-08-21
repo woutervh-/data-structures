@@ -4,7 +4,8 @@
         "module": "commonjs",
         "lib": [
             "dom",
-            "es6"
+            "es6",
+            "esnext"
         ],
         "noImplicitAny": true,
         "strict": true,

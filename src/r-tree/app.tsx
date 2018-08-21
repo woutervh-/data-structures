@@ -2,7 +2,7 @@ import * as React from 'react';
 import * as ReactDOM from 'react-dom';
 import { Draggable } from 'react-managed-draggable';
 import timedMemoize from 'timed-memoize';
-import { makeTree, LogStore, TreeNode, Tree, insert, search, remove } from './append-only';
+import { makeTree, LogStore, TreeNode, Tree, insert, search, remove, scan } from './append-only';
 import { Bounds } from './bounds';
 import './style.css';
 
@@ -57,7 +57,7 @@ class App extends React.Component<{}, AppState> {
 
     searchResults = timedMemoize(async (tree: Tree<string, number> | null, searchBounds: Bounds | null) => {
         if (searchBounds !== null && tree !== null) {
-            return new Set(await search(tree, tree.root, searchBounds));
+            return new Set(await search(tree, tree.root, searchBounds).then((entries) => entries.map((entry) => entry.data)));
         } else {
             return new Set([]);
         }
@@ -74,8 +74,8 @@ class App extends React.Component<{}, AppState> {
         }
     }
 
-    // makeTree = () => makeTree(this.store, 2, 15, 30);
-    makeTree = () => makeTree(this.store, 2, 2, 4);
+    makeTree = () => makeTree(this.store, 2, 15, 30);
+    // makeTree = () => makeTree(this.store, 2, 2, 4);
 
     loop = () => {
         if (this.context) {
@@ -142,6 +142,26 @@ class App extends React.Component<{}, AppState> {
                 const x = this.context.canvas.width * Math.random();
                 const y = this.context.canvas.height * Math.random();
                 tree.root = await insert(tree, { bounds: [x, x, y, y], data: `P${++this.counter}` });
+            }
+            this.setState({ tree });
+        }
+    };
+
+    handleRemoveClick = async () => {
+        if (this.state.tree && this.context) {
+            const tree = { ...this.state.tree };
+            const x = this.context.canvas.width;
+            const y = this.context.canvas.height;
+            let limit = 1000;
+            for await (const result of scan(tree, tree.root, [0, x, 0, y])) {
+                if (limit-- >= 1) {
+                    const root = await remove(tree, result);
+                    if (root) {
+                        tree.root = root;
+                    }
+                } else {
+                    break;
+                }
             }
             this.setState({ tree });
         }
@@ -295,6 +315,7 @@ class App extends React.Component<{}, AppState> {
                 <button onClick={this.handlePrintTreeClick}>Print tree</button>
                 <button onClick={this.handlePrintLogHistogramClick}>Print log histogram</button>
                 <button onClick={this.handleInsertClick}>Insert 1,000 random</button>
+                <button onClick={this.handleRemoveClick}>Remove first 1,000</button>
                 <button onClick={this.handleClearClick}>Clear</button>
             </div>
         </React.Fragment>;
