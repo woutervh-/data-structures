@@ -21,6 +21,41 @@ const colors = [
 class MemoryLogStore implements LogStore<TreeNode<string, number>, number> {
     backingStore: TreeNode<string, number>[] = [];
 
+    bulk() {
+        const start = this.backingStore.length;
+        const backingStore = this.backingStore;
+        const bulkStore: { [Key: string]: TreeNode<string, number> } = {};
+        return new class BulkLogStore implements LogStore<TreeNode<string, number>, number> {
+            counter: number = 0;
+
+            async append(data: TreeNode<string, number>) {
+                this.counter += 1;
+                bulkStore[(start + this.counter).toString()] = data;
+                return start + this.counter;
+            }
+
+            async get(pointer: number) {
+                return pointer < start ? backingStore[pointer] : bulkStore[pointer.toString()];
+            }
+
+            prunedAppend(root: number): number {
+                if (root < start) {
+                    return root;
+                } else {
+                    const node = bulkStore[root.toString()];
+                    if (node.type === 'root') {
+                        node.pointer = this.prunedAppend(node.pointer);
+                    } else if (node.type === 'branch') {
+                        for (const entry of node.entries) {
+                            entry.pointer = this.prunedAppend(entry.pointer);
+                        }
+                    }
+                    return backingStore.push(node) - 1;
+                }
+            }
+        };
+    }
+
     async append(data: TreeNode<string, number>) {
         return this.backingStore.push(data) - 1;
     }
@@ -137,19 +172,20 @@ class App extends React.Component<{}, AppState> {
 
     handleInsertClick = async () => {
         if (this.state.tree && this.context) {
-            const tree = { ...this.state.tree };
+            const tree = { ...this.state.tree, store: this.store.bulk() };
             for (let i = 0; i < 1000; i++) {
                 const x = this.context.canvas.width * Math.random();
                 const y = this.context.canvas.height * Math.random();
                 tree.root = await insert(tree, { bounds: [x, x, y, y], data: `P${++this.counter}` });
             }
-            this.setState({ tree });
+            tree.root = tree.store.prunedAppend(tree.root);
+            this.setState({ tree: { ...tree, store: this.store } });
         }
     };
 
     handleRemoveClick = async () => {
         if (this.state.tree && this.context) {
-            const tree = { ...this.state.tree };
+            const tree = { ...this.state.tree, store: this.store.bulk() };
             const x = this.context.canvas.width;
             const y = this.context.canvas.height;
             let limit = 1000;
@@ -163,7 +199,8 @@ class App extends React.Component<{}, AppState> {
                     break;
                 }
             }
-            this.setState({ tree });
+            tree.root = tree.store.prunedAppend(tree.root);
+            this.setState({ tree: { ...tree, store: this.store } });
         }
     };
 
